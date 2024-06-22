@@ -412,8 +412,15 @@ void init_temperature(Context<TState> &c)
     // - Get changed State
     // - Get changed Energy
     // - Get T
+    //   - from Acceptance ratio formula -> T = ln(P)/dE
+    //   - where dE = E_current - E_new
     // - Keep initial state
     // - Repeat changes N times, get avg/med T
+    //
+    // - Acceptance ratio
+    //   - P to accept solution
+    //   - E_new < E_current: P = 1
+    //   - else: P = exp((E_current - E_new) / T)
     c.temperature = 1;
     c.init_done = true;
 }
