@@ -17,7 +17,13 @@ public:
     double get_energy(lapsa::Settings &s)
     {
         (void)s;
-        return 1.0;
+        assert(data.size() != 0);
+
+        double energy = 0;
+        for (auto &d : data) {
+            energy += d;
+        }
+        return energy;
     }
 
     void randomize(lapsa::Settings &s,

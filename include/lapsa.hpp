@@ -406,6 +406,14 @@ template <typename TState>
 void init_temperature(Context<TState> &c)
 {
     // TODO: implement
+    // - P = 0.95 or higher
+    // - Get random Initial state
+    // - Get Energy
+    // - Get changed State
+    // - Get changed Energy
+    // - Get T
+    // - Keep initial state
+    // - Repeat changes N times, get avg/med T
     c.temperature = 1;
     c.init_done = true;
 }
