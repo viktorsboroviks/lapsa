@@ -185,6 +185,23 @@ public:
         std::cout << "error: get_energy method not implemented" << std::endl;
         return -1.0;
     }
+
+    virtual void randomize(Settings &s,
+                           const std::function<double(void)> &rnd01)
+    {
+        (void)s;
+        (void)rnd01();
+        std::cout << "error: randomize method not implemented" << std::endl;
+    }
+
+    virtual void change(Settings &s, const std::function<double(void)> &rnd01)
+    {
+        // this method is very individual-specific, so to not overthink it
+        // I leave it virtual
+        (void)s;
+        (void)rnd01;
+        std::cout << "error: change method not implemented" << std::endl;
+    }
 };
 
 template <typename TState>
@@ -195,6 +212,7 @@ public:
 
     double temperature = 0;
     TState state;
+    TState proposed_state;
 
     // important! states begin with 1st, not 0th
     size_t state_i = 1;
@@ -328,7 +346,7 @@ void update_log(Context<TState> &c)
 }
 
 template <typename TState>
-void print_progress(Context<TState> &c)
+void print_run_progress(Context<TState> &c)
 {
     const double state_s = 1 / c.cycle_time_us * 1000000;
 
@@ -368,6 +386,28 @@ void create_stats_file(Context<TState> &c)
     std::ofstream f(c.settings.stats_filename);
     f.is_open();
     f << c.get_stats();
+}
+
+template <typename TState>
+void randomize_state(Context<TState> &c)
+{
+    assert(c.state_i == 1);
+    c.state.randomize(c.settings, [&c]() { return c.random.rnd01(); });
+}
+
+template <typename TState>
+void propose_changed_state(Context<TState> &c)
+{
+    c.proposed_state = c.state;
+    c.proposed_state.change(c.settings, [&c]() { return c.random.rnd01(); });
+}
+
+template <typename TState>
+void init_temperature(Context<TState> &c)
+{
+    // TODO: implement
+    c.temperature = 1;
+    c.init_done = true;
 }
 
 }  // namespace lapsa
