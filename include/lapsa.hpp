@@ -431,11 +431,6 @@ void init_temperature(Context<TState> &c)
         if (dE > 0) {
             const double t = -dE / std::log(c.init_p_acceptance);
             c.init_temperatures.push_back(t);
-
-            std::cout << "i: " << c.init_state_i << std::endl;
-            std::cout << "\tdE: " << dE << std::endl;
-            std::cout << "\tt: " << t << std::endl;
-
             c.init_state_i++;
         }
     }
