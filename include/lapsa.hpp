@@ -1,6 +1,6 @@
 #include <cassert>
 #include <chrono>
-// #include <deque>
+#include <cmath>
 #include <fstream>
 #include <functional>
 #include <iomanip>
@@ -171,34 +171,37 @@ struct Settings {
 template <typename TData>
 class State {
 protected:
-    double _energy = 0.0;
+    bool _energy_calculated = false;
+    double _energy = -1;
+    Settings _settings;
 
 public:
     TData data;
 
+    State(Settings &in_settings) :
+        _settings(in_settings)
+    {
+    }
+
     // virtual destructor is required if virtual methods are used
     virtual ~State() {}
 
-    virtual double get_energy(Settings &s)
+    virtual double get_energy()
     {
-        (void)s;
         std::cout << "error: get_energy method not implemented" << std::endl;
         return -1.0;
     }
 
-    virtual void randomize(Settings &s,
-                           const std::function<double(void)> &rnd01)
+    virtual void randomize(const std::function<double(void)> &rnd01)
     {
-        (void)s;
         (void)rnd01();
         std::cout << "error: randomize method not implemented" << std::endl;
     }
 
-    virtual void change(Settings &s, const std::function<double(void)> &rnd01)
+    virtual void change(const std::function<double(void)> &rnd01)
     {
         // this method is very individual-specific, so to not overthink it
         // I leave it virtual
-        (void)s;
         (void)rnd01;
         std::cout << "error: change method not implemented" << std::endl;
     }
@@ -215,10 +218,17 @@ public:
     TState proposed_state;
 
     // important! states begin with 1st, not 0th
+    double init_p_acceptance = 0.97;
+    size_t init_state_i = 1;
+    size_t init_state_imax = 100;
+    std::vector<double> init_temperatures;
+    bool init_done = false;
+
+    // important! states begin with 1st, not 0th
     size_t state_i = 1;
     size_t state_imax = 1000000;
-    bool init_done = false;
     bool run_done = false;
+
     std::chrono::time_point<std::chrono::steady_clock> start_time;
     std::chrono::time_point<std::chrono::steady_clock> stop_time;
     double cycle_time_us = 0;
@@ -229,6 +239,8 @@ public:
     Context(Settings &s) :
         settings(s),
         // TODO: consider setting min/max temperature from real data
+        state(settings),
+        proposed_state(settings),
         progress(0, 100, s.progress_update_period)
     {
     }
@@ -252,7 +264,7 @@ public:
         ss << std::left << std::setw(first_col_width) << "state/s" << state_s
            << std::endl;
         ss << std::left << std::setw(first_col_width) << "result energy"
-           << state.get_energy(settings) << std::endl;
+           << state.get_energy() << std::endl;
         return ss.str();
     }
 };
@@ -340,7 +352,7 @@ void update_log(Context<TState> &c)
 
     c.log_f << c.state_i;
     c.log_f << "," << c.temperature;
-    c.log_f << "," << c.state.get_energy(c.settings);
+    c.log_f << "," << c.state.get_energy();
     c.log_f << std::endl;
     c.log_f << std::flush;
 }
@@ -352,7 +364,7 @@ void print_run_progress(Context<TState> &c)
 
     std::stringstream ss;
     ss << " t " << c.temperature;
-    ss << " e " << c.state.get_energy(c.settings);
+    ss << " e " << c.state.get_energy();
     ss << " state/s " << state_s;
 
     c.progress.update(c.temperature, std::string(ss.str()));
@@ -392,37 +404,48 @@ template <typename TState>
 void randomize_state(Context<TState> &c)
 {
     assert(c.state_i == 1);
-    c.state.randomize(c.settings, [&c]() { return c.random.rnd01(); });
+    c.state.randomize([&c]() { return c.random.rnd01(); });
 }
 
 template <typename TState>
 void propose_changed_state(Context<TState> &c)
 {
     c.proposed_state = c.state;
-    c.proposed_state.change(c.settings, [&c]() { return c.random.rnd01(); });
+    c.proposed_state.change([&c]() { return c.random.rnd01(); });
 }
 
 template <typename TState>
 void init_temperature(Context<TState> &c)
 {
-    // TODO: implement
-    // - P = 0.95 or higher
-    // - Get random Initial state
-    // - Get Energy
-    // - Get changed State
-    // - Get changed Energy
-    // - Get T
-    //   - from Acceptance ratio formula -> T = ln(P)/dE
-    //   - where dE = E_current - E_new
-    // - Keep initial state
-    // - Repeat changes N times, get avg/med T
-    //
-    // - Acceptance ratio
-    //   - P to accept solution
-    //   - E_new < E_current: P = 1
-    //   - else: P = exp((E_current - E_new) / T)
-    c.temperature = 1;
-    c.init_done = true;
+    if (c.init_state_i <= c.init_state_imax) {
+        // calculate intermediate init temperatures
+        // - T = -(E_proposed - E) / ln(P)
+        // - from Acceptance probability
+        //   - if E_new < E_current: P = 1
+        //   - else: P = exp(-(E_proposed - E) / T)
+        //   - ref: https://en.wikipedia.org/wiki/Simulated_annealing
+        // - only for cases where new state is worse and we need
+        //   to use the p_acceptance
+        // - smaller energy = better
+        const double dE = c.proposed_state.get_energy() - c.state.get_energy();
+        if (dE > 0) {
+            const double t = -dE / std::log(c.init_p_acceptance);
+            c.init_temperatures.push_back(t);
+
+            std::cout << "i: " << c.init_state_i << std::endl;
+            std::cout << "\tdE: " << dE << std::endl;
+            std::cout << "\tt: " << t << std::endl;
+
+            c.init_state_i++;
+        }
+    }
+    else {
+        // calculate resulting init temperature
+        assert(c.init_temperatures.size() == c.init_state_imax);
+        c.temperature = *max_element(c.init_temperatures.begin(),
+                                     c.init_temperatures.end());
+        c.init_done = true;
+    }
 }
 
 }  // namespace lapsa

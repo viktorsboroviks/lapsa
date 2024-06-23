@@ -9,36 +9,36 @@ const std::string g_log_filename = "max_double_array_log.csv";
 
 class MyState : lapsa::State<std::vector<double>> {
 public:
-    MyState()
+    MyState(lapsa::Settings &in_settings) :
+        State(in_settings)
     {
         data.resize(g_state_data_size);
     }
 
-    double get_energy(lapsa::Settings &s)
+    double get_energy()
     {
-        (void)s;
-        assert(data.size() != 0);
-
-        double energy = 0;
-        for (auto &d : data) {
-            energy += d;
+        // if energy not calculated, do it now and store the result
+        if (!_energy_calculated) {
+            assert(data.size() != 0);
+            _energy = 0;
+            for (auto &d : data) {
+                _energy += d;
+            }
         }
-        return energy;
+
+        return _energy;
     }
 
-    void randomize(lapsa::Settings &s,
-                   const std::function<double(void)> &rnd01)
+    void randomize(const std::function<double(void)> &rnd01)
     {
-        (void)s;
         assert(data.size() != 0);
         for (auto &d : data) {
             d = rnd01();
         }
     }
 
-    void change(lapsa::Settings &s, const std::function<double(void)> &rnd01)
+    void change(const std::function<double(void)> &rnd01)
     {
-        (void)s;
         assert(data.size() != 0);
         size_t changed_i = rnd01() * data.size();
         data[changed_i] = rnd01();
