@@ -61,7 +61,9 @@ int main()
     sm.run_loop_functions = {lapsa::update_state<MyState>,
                              lapsa::propose_changed_state<MyState>,
                              // TODO: accept_state
-                             // TODO: update_temperature
+                             // TODO: update_temperature (adaptive cooling)
+// - calc sma(dE)
+// - if < min -> dec(t)
                              // - if T==0 -> set return flag
                              // TODO: update_records
                              lapsa::update_log<MyState>,
