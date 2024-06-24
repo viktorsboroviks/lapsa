@@ -1,6 +1,7 @@
 #include <cassert>
 #include <chrono>
 #include <cmath>
+#include <deque>
 #include <fstream>
 #include <functional>
 #include <iomanip>
@@ -163,6 +164,11 @@ public:
 //   - closure
 
 struct Settings {
+    double init_p_acceptance = 0;
+    double temperature_drop_pct = 0;
+    double min_sma_dE_pct = 0;
+    size_t dE_log_len = 100;
+    size_t init_state_imax = 100;
     size_t progress_update_period = 0;
     std::string log_filename{""};
     std::string stats_filename{"stats.txt"};
@@ -214,19 +220,18 @@ public:
     Random random{};
 
     double temperature = 0;
+    double temperature_drop = 0;
     TState state;
     TState proposed_state;
+    std::deque<double> dE_log;
 
     // important! states begin with 1st, not 0th
-    double init_p_acceptance = 0.97;
     size_t init_state_i = 1;
-    size_t init_state_imax = 100;
     std::vector<double> init_temperatures;
     bool init_done = false;
 
     // important! states begin with 1st, not 0th
     size_t state_i = 1;
-    size_t state_imax = 1000000;
     bool run_done = false;
 
     std::chrono::time_point<std::chrono::steady_clock> start_time;
@@ -371,18 +376,6 @@ void print_run_progress(Context<TState> &c)
 }
 
 template <typename TState>
-void update_state(Context<TState> &c)
-{
-    // TODO: review and change this function
-    if (c.state_i > c.state_imax) {
-        c.run_done = true;
-        return;
-    }
-
-    c.state_i++;
-}
-
-template <typename TState>
 void print_stats(Context<TState> &c)
 {
     std::cout << c.get_stats();
@@ -408,7 +401,7 @@ void randomize_state(Context<TState> &c)
 }
 
 template <typename TState>
-void propose_changed_state(Context<TState> &c)
+void propose_new_state(Context<TState> &c)
 {
     c.proposed_state = c.state;
     c.proposed_state.change([&c]() { return c.random.rnd01(); });
@@ -417,7 +410,7 @@ void propose_changed_state(Context<TState> &c)
 template <typename TState>
 void init_temperature(Context<TState> &c)
 {
-    if (c.init_state_i <= c.init_state_imax) {
+    if (c.init_state_i <= c.settings.init_state_imax) {
         // calculate intermediate init temperatures
         // - T = -(E_proposed - E) / ln(P)
         // - from Acceptance probability
@@ -428,18 +421,84 @@ void init_temperature(Context<TState> &c)
         //   to use the p_acceptance
         // - smaller energy = better
         const double dE = c.proposed_state.get_energy() - c.state.get_energy();
-        if (dE > 0) {
-            const double t = -dE / std::log(c.init_p_acceptance);
+        if (dE >= 0) {
+            const double t = -dE / std::log(c.settings.init_p_acceptance);
             c.init_temperatures.push_back(t);
             c.init_state_i++;
         }
     }
     else {
         // calculate resulting init temperature
-        assert(c.init_temperatures.size() == c.init_state_imax);
+        assert(c.settings.temperature_drop_pct > 0);
+        assert(c.temperature_drop == 0);
+        assert(c.temperature == 0);
+        assert(c.init_temperatures.size() == c.settings.init_state_imax);
         c.temperature = *max_element(c.init_temperatures.begin(),
                                      c.init_temperatures.end());
+        c.temperature_drop =
+                c.temperature * c.settings.temperature_drop_pct / 100;
+        std::cout << "t: " << c.temperature << std::endl;
+        std::cout << "t_drop: " << c.temperature_drop << std::endl;
+    }
+}
+
+template <typename TState>
+void check_init_done(Context<TState> &c)
+{
+    if (c.temperature > 0) {
         c.init_done = true;
+    }
+}
+
+template <typename TState>
+void log_dE(Context<TState> &c)
+{
+    const double dE = c.proposed_state.get_energy() - c.state.get_energy();
+    c.dE_log.push_back(dE);
+    if (c.dE_log.size() > c.settings.dE_log_len) {
+        c.dE_log.pop_front();
+        assert(c.dE_log.size() == c.settings.dE_log_len);
+    }
+    assert(c.dE_log.size() <= c.settings.dE_log_len);
+}
+
+template <typename TState>
+void update_state(Context<TState> &c)
+{
+    const double dE = c.proposed_state.get_energy() - c.state.get_energy();
+
+    const double p_acceptance = std::exp(-dE / c.temperature);
+    if (dE < 0 || c.random.rnd01() <= p_acceptance) {
+        c.state = c.proposed_state;
+    }
+}
+
+template <typename TState>
+void update_temperature(Context<TState> &c)
+{
+    assert(c.dE_log.size() <= c.settings.dE_log_len);
+    if (c.dE_log.size() == c.settings.dE_log_len) {
+        const double dE = c.proposed_state.get_energy() - c.state.get_energy();
+        const double sma_dE =
+                std::accumulate(c.dE_log.begin(), c.dE_log.end(), 0) /
+                c.dE_log.size();
+        const double sma_dE_pct = sma_dE / dE * 100;
+        if (sma_dE_pct < c.settings.min_sma_dE_pct) {
+            c.temperature -= c.temperature_drop;
+            if (c.temperature < 0) {
+                c.temperature = 0;
+            }
+        }
+    }
+}
+
+template <typename TState>
+void check_run_done(Context<TState> &c)
+{
+    assert(c.temperature >= 0);
+    assert(!c.run_done);
+    if (c.temperature == 0) {
+        c.run_done = true;
     }
 }
 
