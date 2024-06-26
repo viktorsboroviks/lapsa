@@ -77,6 +77,8 @@ int main()
     sm.run_loop_functions = {
             lapsa::propose_new_state<MyState>,
             lapsa::update_temperature_with_geom_cooling_schedule<MyState>,
+            //            lapsa::record_energy<MyState>,
+            //            lapsa::update_temperature_with_adaptive_cooling<MyState>,
             lapsa::update_state<MyState>,
             lapsa::check_run_done<MyState>,
             lapsa::update_log<MyState>,

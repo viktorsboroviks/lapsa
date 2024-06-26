@@ -159,7 +159,7 @@ public:
 struct Settings {
     double init_p_acceptance = 0.99;
     size_t init_t_len = 100;
-    double t_drop_k = 0.95;
+    double t_geom_k = 0.95;
     double t_min_pct = 0.5;
 
     size_t progress_update_period = 0;
@@ -490,13 +490,13 @@ void update_state(Context<TState> &c)
 }
 
 template <typename TState>
-void update_temperature(Context<TState> &c)
+void update_temperature_with_geom_cooling_schedule(Context<TState> &c)
 {
-    assert(c.settings.t_drop_k > 0);
-    assert(c.settings.t_drop_k < 1);
+    assert(c.settings.t_geom_k > 0);
+    assert(c.settings.t_geom_k < 1);
     assert(c.temperature <= c.t_max);
     assert(c.temperature >= 0);
-    c.temperature *= c.settings.t_drop_k;
+    c.temperature *= c.settings.t_geom_k;
 
     if (c.temperature < 0) {
         c.temperature = 0;
