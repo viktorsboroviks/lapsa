@@ -161,8 +161,8 @@ struct Settings {
     size_t init_t_log_len = 100;
     double t_geom_k = 0.95;
     double t_min_pct = 0.5;
-    size_t energy_sma_len = 100;
-    size_t energy_sma_past_i = 100;
+    size_t e_sma_len = 100;
+    size_t e_sma_past_i = 100;
 
     size_t progress_update_period = 0;
     std::string log_filename{""};
@@ -255,7 +255,7 @@ public:
         // TODO: consider setting min/max temperature from real data
         state(settings),
         proposed_state(settings),
-        e_log_len(settings.energy_sma_past_i + settings.energy_sma_len),
+        e_log_len(settings.e_sma_past_i + settings.e_sma_len),
         progress(0, 100, s.progress_update_period)
     {
     }
@@ -511,12 +511,52 @@ void update_temperature_with_geom_cooling_schedule(Context<TState> &c)
 template <typename TState>
 void record_energy(Context<TState> &c)
 {
+    const double dE = c.proposed_state.get_energy() - c.state.get_energy();
+    if (dE >= 0) {
+        return;
+    }
+
     assert(c.e_log_len > 0);
     c.e_log.push_front(c.state.get_energy());
     if (c.e_log.size() > c.e_log_len) {
         c.e_log.pop_back();
     }
     assert(c.e_log.size() <= c.e_log_len);
+}
+
+template <typename TState>
+void update_temperature_with_geom_adaptive_cooling(Context<TState> &c)
+{
+    if (c.e_log.size() < c.e_log_len) {
+        return;
+    }
+
+    assert(c.temperature <= c.t_max);
+    assert(c.temperature >= 0);
+
+    // calculate avg(energy) at two intervals in the past
+    double sum_e_sma = 0;
+    for (size_t i = 0; i < c.settings.e_sma_len; i++) {
+        sum_e_sma += c.e_log[i];
+    }
+    const double avg_e = sum_e_sma / c.settings.e_sma_len;
+
+    double sum_e_sma_past = 0;
+    for (size_t i = c.settings.e_sma_past_i;
+         i < (c.settings.e_sma_past_i + c.settings.e_sma_len); i++) {
+        sum_e_sma_past += c.e_log[i];
+    }
+    const double avg_e_past = sum_e_sma_past / c.settings.e_sma_len;
+
+    if (avg_e > avg_e_past) {
+        return;
+    }
+
+    c.temperature *= c.settings.t_geom_k;
+
+    if (c.temperature < 0) {
+        c.temperature = 0;
+    }
 }
 
 template <typename TState>

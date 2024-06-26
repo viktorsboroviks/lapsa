@@ -8,6 +8,8 @@ double g_init_p_acceptance = 0.97;
 size_t g_init_t_log_len = 100;
 double g_t_geom_k = (1 - 1e-4);
 double g_t_min_pct = 1e-10;
+size_t g_e_sma_len = 1000;
+size_t g_e_sma_past_i = 1000;
 
 const size_t g_state_data_size = 100;
 const std::string g_log_filename = "max_double_array_log.csv";
@@ -62,6 +64,8 @@ int main()
     s.t_geom_k = g_t_geom_k;
     s.t_min_pct = g_t_min_pct;
     s.log_filename = g_log_filename;
+    s.e_sma_len = g_e_sma_len;
+    s.e_sma_past_i = g_e_sma_past_i;
 
     lapsa::StateMachine<MyState> sm{s};
     sm.init_functions = {
@@ -77,8 +81,7 @@ int main()
     sm.run_loop_functions = {
             lapsa::propose_new_state<MyState>,
             lapsa::record_energy<MyState>,
-            lapsa::update_temperature_with_geom_cooling_schedule<MyState>,
-            //            lapsa::update_temperature_with_adaptive_cooling<MyState>,
+            lapsa::update_temperature_with_geom_adaptive_cooling<MyState>,
             lapsa::update_state<MyState>,
             lapsa::check_run_done<MyState>,
             lapsa::update_log<MyState>,
