@@ -84,11 +84,6 @@ public:
     {
     }
 
-    ~Progress()
-    {
-        os_clean();
-    }
-
     void update(double n)
     {
         update(n, "");
@@ -142,13 +137,11 @@ public:
         last_update_time = std::chrono::steady_clock::now();
     }
 
-    void os_clean(size_t n_chars = 200)
+    void os_clear_line()
     {
-        // overwrite command line with n_chars ' '
-        for (size_t i = 0; i < n_chars; i++) {
-            os << " ";
-        }
-        os << "\r" << std::flush;
+        // move the cursor to the beginning of the current line and clear it
+        os << "\r\033[K";
+        os << std::flush;
     }
 };
 
@@ -389,6 +382,12 @@ void print_run_progress(Context<TState> &c)
 }
 
 template <typename TState>
+void clear_progress(Context<TState> &c)
+{
+    c.progress.os_clear_line();
+}
+
+template <typename TState>
 void print_stats(Context<TState> &c)
 {
     std::cout << c.get_stats();
@@ -421,46 +420,44 @@ void propose_new_state(Context<TState> &c)
 }
 
 template <typename TState>
-void init_temperature(Context<TState> &c)
+void record_init_temperature(Context<TState> &c)
+{
+    // calculate intermediate init temperatures
+    // - T = -(E_proposed - E) / ln(P)
+    // - from Acceptance probability
+    //   - if E_new < E_current: P = 1
+    //   - else: P = exp(-(E_proposed - E) / T)
+    //   - ref: https://en.wikipedia.org/wiki/Simulated_annealing
+    // - only for cases where new state is worse and we need
+    //   to use the p_acceptance
+    // - smaller energy = better
+    assert(c.init_t.size() < c.settings.init_t_len);
+
+    const double dE = c.proposed_state.get_energy() - c.state.get_energy();
+    if (dE >= 0) {
+        const double t = -dE / std::log(c.settings.init_p_acceptance);
+        c.init_t.push_back(t);
+        c.init_state_i++;
+    }
+}
+
+template <typename TState>
+void select_init_temperature_as_max(Context<TState> &c)
 {
     if (c.init_t.size() < c.settings.init_t_len) {
-        // calculate intermediate init temperatures
-        // - T = -(E_proposed - E) / ln(P)
-        // - from Acceptance probability
-        //   - if E_new < E_current: P = 1
-        //   - else: P = exp(-(E_proposed - E) / T)
-        //   - ref: https://en.wikipedia.org/wiki/Simulated_annealing
-        // - only for cases where new state is worse and we need
-        //   to use the p_acceptance
-        // - smaller energy = better
-        const double dE = c.proposed_state.get_energy() - c.state.get_energy();
-        if (dE >= 0) {
-            const double t = -dE / std::log(c.settings.init_p_acceptance);
-            c.init_t.push_back(t);
-            c.init_state_i++;
-        }
+        return;
     }
-    else {
-        // calculate resulting init temperature
-        assert(c.temperature == 0);
-        assert(c.t_min == 0);
-        assert(c.t_max == 0);
-        assert(c.init_t.size() == c.settings.init_t_len);
-        assert(c.settings.t_min_pct >= 0);
 
-        // t_max = avg(init_t at init_p_acceptance)
-        // another (better? algorithm could be used)
-        double init_t_sum = 0;
-        for (double t : c.init_t) {
-            init_t_sum += t;
-        }
-        c.t_max = init_t_sum / c.init_t.size();
-        c.t_min = c.t_max * c.settings.t_min_pct / 100;
-        c.temperature = c.t_max;
+    assert(c.init_t.size() == c.settings.init_t_len);
+    assert(c.temperature == 0);
+    assert(c.t_min == 0);
+    assert(c.t_max == 0);
+    assert(c.settings.t_min_pct >= 0);
 
-        std::cout << "debug t_max: " << c.t_max << std::endl;
-        std::cout << "debug t_min: " << c.t_min << std::endl;
-    }
+    // t_max = max(init_t at init_p_acceptance)
+    c.t_max = *max_element(c.init_t.begin(), c.init_t.end());
+    c.t_min = c.t_max * c.settings.t_min_pct / 100;
+    c.temperature = c.t_max;
 }
 
 template <typename TState>

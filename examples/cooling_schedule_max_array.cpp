@@ -70,7 +70,8 @@ int main()
     };
     sm.init_loop_functions = {
             lapsa::propose_new_state<MyState>,
-            lapsa::init_temperature<MyState>,
+            lapsa::record_init_temperature<MyState>,
+            lapsa::select_init_temperature_as_max<MyState>,
             lapsa::check_init_done<MyState>,
     };
     sm.run_loop_functions = {
@@ -82,6 +83,7 @@ int main()
             lapsa::print_run_progress<MyState>,
     };
     sm.finalize_functions = {
+            lapsa::clear_progress<MyState>,
             lapsa::print_stats<MyState>,
             lapsa::create_stats_file<MyState>,
     };
