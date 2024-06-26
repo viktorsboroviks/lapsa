@@ -158,9 +158,11 @@ public:
 
 struct Settings {
     double init_p_acceptance = 0.99;
-    size_t init_t_len = 100;
+    size_t init_t_log_len = 100;
     double t_geom_k = 0.95;
     double t_min_pct = 0.5;
+    size_t energy_sma_len = 100;
+    size_t energy_sma_past_i = 100;
 
     size_t progress_update_period = 0;
     std::string log_filename{""};
@@ -229,7 +231,7 @@ public:
 
     // important! states begin with 1st, not 0th
     size_t init_state_i = 1;
-    std::vector<double> init_t;
+    std::vector<double> init_t_log;
     bool init_done = false;
 
     // important! states begin with 1st, not 0th
@@ -237,6 +239,8 @@ public:
     double t_min = 0;
     size_t state_i = 1;
     size_t t_drop_state_i = state_i;
+    std::deque<double> e_log;
+    size_t e_log_len;
     bool run_done = false;
 
     std::chrono::time_point<std::chrono::steady_clock> start_time;
@@ -251,6 +255,7 @@ public:
         // TODO: consider setting min/max temperature from real data
         state(settings),
         proposed_state(settings),
+        e_log_len(settings.energy_sma_past_i + settings.energy_sma_len),
         progress(0, 100, s.progress_update_period)
     {
     }
@@ -431,12 +436,12 @@ void record_init_temperature(Context<TState> &c)
     // - only for cases where new state is worse and we need
     //   to use the p_acceptance
     // - smaller energy = better
-    assert(c.init_t.size() < c.settings.init_t_len);
+    assert(c.init_t_log.size() < c.settings.init_t_log_len);
 
     const double dE = c.proposed_state.get_energy() - c.state.get_energy();
     if (dE >= 0) {
         const double t = -dE / std::log(c.settings.init_p_acceptance);
-        c.init_t.push_back(t);
+        c.init_t_log.push_back(t);
         c.init_state_i++;
     }
 }
@@ -444,18 +449,18 @@ void record_init_temperature(Context<TState> &c)
 template <typename TState>
 void select_init_temperature_as_max(Context<TState> &c)
 {
-    if (c.init_t.size() < c.settings.init_t_len) {
+    if (c.init_t_log.size() < c.settings.init_t_log_len) {
         return;
     }
 
-    assert(c.init_t.size() == c.settings.init_t_len);
+    assert(c.init_t_log.size() == c.settings.init_t_log_len);
     assert(c.temperature == 0);
     assert(c.t_min == 0);
     assert(c.t_max == 0);
     assert(c.settings.t_min_pct >= 0);
 
     // t_max = max(init_t at init_p_acceptance)
-    c.t_max = *max_element(c.init_t.begin(), c.init_t.end());
+    c.t_max = *max_element(c.init_t_log.begin(), c.init_t_log.end());
     c.t_min = c.t_max * c.settings.t_min_pct / 100;
     c.temperature = c.t_max;
 }
@@ -464,7 +469,7 @@ template <typename TState>
 void check_init_done(Context<TState> &c)
 {
     if (c.temperature > 0) {
-        assert(c.init_t.size() == c.settings.init_t_len);
+        assert(c.init_t_log.size() == c.settings.init_t_log_len);
         c.init_done = true;
     }
 }
@@ -501,6 +506,17 @@ void update_temperature_with_geom_cooling_schedule(Context<TState> &c)
     if (c.temperature < 0) {
         c.temperature = 0;
     }
+}
+
+template <typename TState>
+void record_energy(Context<TState> &c)
+{
+    assert(c.e_log_len > 0);
+    c.e_log.push_front(c.state.get_energy());
+    if (c.e_log.size() > c.e_log_len) {
+        c.e_log.pop_back();
+    }
+    assert(c.e_log.size() <= c.e_log_len);
 }
 
 template <typename TState>

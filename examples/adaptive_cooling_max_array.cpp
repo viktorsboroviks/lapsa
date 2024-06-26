@@ -5,7 +5,7 @@
 #include "lapsa.hpp"
 
 double g_init_p_acceptance = 0.97;
-size_t g_init_t_len = 100;
+size_t g_init_t_log_len = 100;
 double g_t_geom_k = (1 - 1e-4);
 double g_t_min_pct = 1e-10;
 
@@ -58,7 +58,7 @@ int main()
 {
     lapsa::Settings s{};
     s.init_p_acceptance = g_init_p_acceptance;
-    s.init_t_len = g_init_t_len;
+    s.init_t_log_len = g_init_t_log_len;
     s.t_geom_k = g_t_geom_k;
     s.t_min_pct = g_t_min_pct;
     s.log_filename = g_log_filename;
@@ -76,8 +76,8 @@ int main()
     };
     sm.run_loop_functions = {
             lapsa::propose_new_state<MyState>,
+            lapsa::record_energy<MyState>,
             lapsa::update_temperature_with_geom_cooling_schedule<MyState>,
-            //            lapsa::record_energy<MyState>,
             //            lapsa::update_temperature_with_adaptive_cooling<MyState>,
             lapsa::update_state<MyState>,
             lapsa::check_run_done<MyState>,
