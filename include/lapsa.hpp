@@ -161,8 +161,8 @@ struct Settings {
     size_t init_t_log_len = 100;
     double t_geom_k = 0.95;
     double t_min_pct = 0.5;
-    size_t e_sma_len = 100;
-    size_t e_sma_past_i = 100;
+    size_t e_sma_fast_len = 50;
+    size_t e_sma_slow_len = 200;
 
     size_t progress_update_period = 0;
     std::string log_filename{""};
@@ -255,7 +255,7 @@ public:
         // TODO: consider setting min/max temperature from real data
         state(settings),
         proposed_state(settings),
-        e_log_len(settings.e_sma_past_i + settings.e_sma_len),
+        e_log_len(settings.e_sma_slow_len),
         progress(0, 100, s.progress_update_period)
     {
     }
@@ -535,20 +535,19 @@ void update_temperature_with_geom_adaptive_cooling(Context<TState> &c)
     assert(c.temperature >= 0);
 
     // calculate avg(energy) at two intervals in the past
-    double sum_e_sma = 0;
-    for (size_t i = 0; i < c.settings.e_sma_len; i++) {
-        sum_e_sma += c.e_log[i];
+    double sum_e_sma_fast = 0;
+    for (size_t i = 0; i < c.settings.e_sma_fast_len; i++) {
+        sum_e_sma_fast += c.e_log[i];
     }
-    const double avg_e = sum_e_sma / c.settings.e_sma_len;
+    const double e_sma_fast = sum_e_sma_fast / c.settings.e_sma_fast_len;
 
-    double sum_e_sma_past = 0;
-    for (size_t i = c.settings.e_sma_past_i;
-         i < (c.settings.e_sma_past_i + c.settings.e_sma_len); i++) {
-        sum_e_sma_past += c.e_log[i];
+    double sum_e_sma_slow = 0;
+    for (size_t i = 0; i < c.settings.e_sma_slow_len; i++) {
+        sum_e_sma_slow += c.e_log[i];
     }
-    const double avg_e_past = sum_e_sma_past / c.settings.e_sma_len;
+    const double e_sma_slow = sum_e_sma_slow / c.settings.e_sma_slow_len;
 
-    if (avg_e > avg_e_past) {
+    if (e_sma_fast > e_sma_slow) {
         return;
     }
 
