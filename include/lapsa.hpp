@@ -157,6 +157,7 @@ public:
 //   - closure
 
 struct Settings {
+    size_t state_imax = 1000000;
     double init_p_acceptance = 0.99;
     size_t init_t_log_len = 100;
     double t_geom_k = 0.95;
@@ -208,14 +209,14 @@ public:
         std::cout << "error: randomize method not implemented" << std::endl;
     }
 
-    virtual void perturbate(const std::function<double(void)> &rnd01)
+    virtual void change(const std::function<double(void)> &rnd01)
     {
         reset_energy();
 
         // this method is very individual-specific, so to not overthink it
         // I leave it virtual
         (void)rnd01;
-        std::cout << "error: perturbate method not implemented" << std::endl;
+        std::cout << "error: change method not implemented" << std::endl;
     }
 };
 
@@ -421,7 +422,7 @@ template <typename TState>
 void propose_new_state(Context<TState> &c)
 {
     c.proposed_state = c.state;
-    c.proposed_state.perturbate([&c]() { return c.random.rnd01(); });
+    c.proposed_state.change([&c]() { return c.random.rnd01(); });
 }
 
 template <typename TState>
@@ -564,7 +565,7 @@ void check_run_done(Context<TState> &c)
     assert(c.temperature <= c.t_max);
     assert(c.temperature >= 0);
     assert(!c.run_done);
-    if (c.temperature < c.t_min) {
+    if (c.temperature < c.t_min && c.state_i == c.settings.state_imax) {
         c.run_done = true;
     }
 }

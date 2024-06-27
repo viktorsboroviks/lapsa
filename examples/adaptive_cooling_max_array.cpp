@@ -46,7 +46,7 @@ public:
         reset_energy();
     }
 
-    void perturbate(const std::function<double(void)> &rnd01)
+    void change(const std::function<double(void)> &rnd01)
     {
         assert(data.size() != 0);
         size_t changed_i = rnd01() * data.size();
