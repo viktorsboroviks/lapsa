@@ -84,6 +84,10 @@ public:
     {
     }
 
+    Progress() : Progress(0, 0, 0)
+    {
+    }
+
     void update(double n)
     {
         update(n, "");
@@ -248,16 +252,14 @@ public:
     std::chrono::time_point<std::chrono::steady_clock> stop_time;
     double cycle_time_us = 0;
 
-    Progress progress;
+    Progress run_progress;
     std::ofstream log_f;
 
     Context(Settings &s) :
         settings(s),
-        // TODO: consider setting min/max temperature from real data
         state(settings),
         proposed_state(settings),
-        e_log_len(settings.e_sma_slow_len),
-        progress(0, 100, s.progress_update_period)
+        e_log_len(settings.e_sma_slow_len)
     {
     }
 
@@ -374,6 +376,16 @@ void update_log(Context<TState> &c)
 }
 
 template <typename TState>
+void init_run_progress(Context<TState> &c)
+{
+    if (c.temperature > 0) {
+        c.run_progress.n_min = 0;
+        c.run_progress.n_max = c.temperature;
+        c.run_progress.update_period = c.settings.progress_update_period;
+    }
+}
+
+template <typename TState>
 void print_run_progress(Context<TState> &c)
 {
     const double state_s = 1 / c.cycle_time_us * 1000000;
@@ -384,13 +396,13 @@ void print_run_progress(Context<TState> &c)
     ss << " state " << c.state_i;
     ss << " state/s " << state_s;
 
-    c.progress.update(c.temperature, std::string(ss.str()));
+    c.run_progress.update(c.temperature, std::string(ss.str()));
 }
 
 template <typename TState>
-void clear_progress(Context<TState> &c)
+void clear_run_progress(Context<TState> &c)
 {
-    c.progress.os_clear_line();
+    c.run_progress.os_clear_line();
 }
 
 template <typename TState>
@@ -565,7 +577,7 @@ void check_run_done(Context<TState> &c)
     assert(c.temperature <= c.t_max);
     assert(c.temperature >= 0);
     assert(!c.run_done);
-    if (c.temperature < c.t_min && c.state_i == c.settings.state_imax) {
+    if (c.temperature < c.t_min || c.state_i == c.settings.state_imax) {
         c.run_done = true;
     }
 }

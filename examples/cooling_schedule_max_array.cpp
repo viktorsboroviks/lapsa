@@ -44,7 +44,7 @@ public:
         reset_energy();
     }
 
-    void perturbate(const std::function<double(void)> &rnd01)
+    void change(const std::function<double(void)> &rnd01)
     {
         assert(data.size() != 0);
         size_t changed_i = rnd01() * data.size();
@@ -72,6 +72,7 @@ int main()
             lapsa::propose_new_state<MyState>,
             lapsa::record_init_temperature<MyState>,
             lapsa::select_init_temperature_as_max<MyState>,
+            lapsa::init_run_progress<MyState>,
             lapsa::check_init_done<MyState>,
     };
     sm.run_loop_functions = {
@@ -83,7 +84,7 @@ int main()
             lapsa::print_run_progress<MyState>,
     };
     sm.finalize_functions = {
-            lapsa::clear_progress<MyState>,
+            lapsa::clear_run_progress<MyState>,
             lapsa::print_stats<MyState>,
             lapsa::create_stats_file<MyState>,
     };
