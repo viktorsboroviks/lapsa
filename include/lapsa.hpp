@@ -74,17 +74,19 @@ public:
     char c_no_fill = ' ';
     size_t c_bar_len = 10;
     size_t update_period;
-    double n_min;
-    double n_max;
+    size_t n_min;
+    size_t n_max;
 
-    Progress(double in_n_min, double in_n_max, size_t in_update_period = 0) :
+    Progress(size_t in_n_min, size_t in_n_max, size_t in_update_period = 1) :
         update_period(in_update_period),
         n_min(in_n_min),
         n_max(in_n_max)
     {
+        assert(update_period > 0);
     }
 
-    Progress() : Progress(0, 0, 0)
+    Progress() :
+        Progress(0, 0)
     {
     }
 
@@ -93,14 +95,14 @@ public:
         update(n, "");
     }
 
-    void update(double n, std::string text)
+    void update(size_t n, std::string text)
     {
         assert(n >= n_min);
         assert(n <= n_max);
 
         // if update_period specified:
         // to not overload the console - update only at update_period
-        if (update_period) {
+        if (update_period > 1) {
             static size_t next_update_in = 0;
 
             if (next_update_in == 0) {
@@ -117,7 +119,7 @@ public:
         std::stringstream ss;
 
         ss << c_opening_bracket;
-        size_t n_fill = n / (n_max - n_min) * c_bar_len;
+        size_t n_fill = n / (double)(n_max - n_min) * c_bar_len;
         for (size_t i = 0; i < c_bar_len; i++) {
             if (i < n_fill) {
                 ss << c_fill;
@@ -127,8 +129,15 @@ public:
             }
         }
 
+        const size_t n_max_strlen = std::to_string(n_max).length();
+
         ss << c_closing_bracket;
-        // TODO: add ETA
+        ss << " " << std::setfill('0') << std::setw(n_max_strlen) << n;
+        ss << "/" << n_max;
+        ss << " " << std::fixed << std::setprecision(1)
+           << (double)n / n_max * 100 << "%";
+        double eta_s = get_eta_s(n, update_period);
+        ss << " ETA " << seconds_to_hhmmss_string(eta_s);
         ss << text;
         // overwrite remalining command line with ' '
         const size_t n_chars = 5;
@@ -137,8 +146,21 @@ public:
         }
         ss << "\r";
         os << ss.str();
+    }
 
-        last_update_time = std::chrono::steady_clock::now();
+    double get_eta_s(size_t n, const size_t update_period)
+    {
+        const std::chrono::time_point<std::chrono::steady_clock> now =
+                std::chrono::steady_clock::now();
+        const double us_per_update_period =
+                std::chrono::duration_cast<std::chrono::microseconds>(
+                        now - last_update_time)
+                        .count();
+        last_update_time = now;
+        const size_t remaining_n = n_max - n;
+        const double eta_s =
+                us_per_update_period / update_period * remaining_n / 1000000;
+        return eta_s;
     }
 
     void os_clear_line()
@@ -161,15 +183,14 @@ public:
 //   - closure
 
 struct Settings {
-    size_t state_imax = 1000000;
+    size_t n_states = 1000000;
     double init_p_acceptance = 0.99;
     size_t init_t_log_len = 100;
     double t_geom_k = 0.95;
-    double t_min_pct = 0.5;
     size_t e_sma_fast_len = 50;
     size_t e_sma_slow_len = 200;
 
-    size_t progress_update_period = 0;
+    size_t progress_update_period = 1;
     std::string log_filename{""};
     std::string stats_filename{"stats.txt"};
 };
@@ -241,7 +262,6 @@ public:
 
     // important! states begin with 1st, not 0th
     double t_max = 0;
-    double t_min = 0;
     size_t state_i = 1;
     size_t t_drop_state_i = state_i;
     std::deque<double> e_log;
@@ -356,7 +376,7 @@ void init_log(Context<TState> &c)
 
     c.log_f.open(c.settings.log_filename);
     c.log_f.is_open();
-    c.log_f << "state_i,energy" << std::endl;
+    c.log_f << "state_i,temperature,energy" << std::endl;
 }
 
 template <typename TState>
@@ -379,8 +399,8 @@ template <typename TState>
 void init_run_progress(Context<TState> &c)
 {
     if (c.temperature > 0) {
-        c.run_progress.n_min = 0;
-        c.run_progress.n_max = c.temperature;
+        c.run_progress.n_min = 1;
+        c.run_progress.n_max = c.settings.n_states;
         c.run_progress.update_period = c.settings.progress_update_period;
     }
 }
@@ -393,10 +413,9 @@ void print_run_progress(Context<TState> &c)
     std::stringstream ss;
     ss << " t " << c.temperature;
     ss << " e " << c.state.get_energy();
-    ss << " state " << c.state_i;
-    ss << " state/s " << state_s;
+    ss << " n/s " << state_s;
 
-    c.run_progress.update(c.temperature, std::string(ss.str()));
+    c.run_progress.update(c.state_i, std::string(ss.str()));
 }
 
 template <typename TState>
@@ -468,13 +487,10 @@ void select_init_temperature_as_max(Context<TState> &c)
 
     assert(c.init_t_log.size() == c.settings.init_t_log_len);
     assert(c.temperature == 0);
-    assert(c.t_min == 0);
     assert(c.t_max == 0);
-    assert(c.settings.t_min_pct >= 0);
 
     // t_max = max(init_t at init_p_acceptance)
     c.t_max = *max_element(c.init_t_log.begin(), c.init_t_log.end());
-    c.t_min = c.t_max * c.settings.t_min_pct / 100;
     c.temperature = c.t_max;
 }
 
@@ -577,7 +593,7 @@ void check_run_done(Context<TState> &c)
     assert(c.temperature <= c.t_max);
     assert(c.temperature >= 0);
     assert(!c.run_done);
-    if (c.temperature < c.t_min || c.state_i == c.settings.state_imax) {
+    if (c.state_i == c.settings.n_states) {
         c.run_done = true;
     }
 }

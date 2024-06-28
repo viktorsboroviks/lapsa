@@ -4,10 +4,11 @@
 
 #include "lapsa.hpp"
 
+size_t g_n_states = 1000000;
+size_t g_progress_update_period = 100;
 double g_init_p_acceptance = 0.97;
 size_t g_init_t_log_len = 100;
 double g_t_geom_k = (1 - 1e-4);
-double g_t_min_pct = 1e-10;
 
 const size_t g_state_data_size = 100;
 const std::string g_log_filename = "max_double_array_log.csv";
@@ -57,10 +58,11 @@ public:
 int main()
 {
     lapsa::Settings s{};
+    s.n_states = g_n_states;
+    s.progress_update_period = g_progress_update_period;
     s.init_p_acceptance = g_init_p_acceptance;
     s.init_t_log_len = g_init_t_log_len;
     s.t_geom_k = g_t_geom_k;
-    s.t_min_pct = g_t_min_pct;
     s.log_filename = g_log_filename;
 
     lapsa::StateMachine<MyState> sm{s};
