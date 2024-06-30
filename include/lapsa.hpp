@@ -411,8 +411,8 @@ void print_run_progress(Context<TState> &c)
     const double state_s = 1 / c.cycle_time_us * 1000000;
 
     std::stringstream ss;
-    ss << " t " << c.temperature;
     ss << " e " << c.state.get_energy();
+    ss << " t " << c.temperature;
     ss << " n/s " << state_s;
 
     c.run_progress.update(c.state_i, std::string(ss.str()));
