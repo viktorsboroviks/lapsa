@@ -258,15 +258,12 @@ public:
     TState state;
     TState proposed_state;
 
-    // important! states begin with 1st, not 0th
-    size_t init_state_i = 1;
     std::vector<double> init_t_log;
     bool init_done = false;
 
     // important! states begin with 1st, not 0th
     double t_max = 0;
     size_t state_i = 1;
-    size_t t_drop_state_i = state_i;
     std::deque<double> e_log;
     size_t e_log_len;
     bool run_done = false;
@@ -477,7 +474,6 @@ void record_init_temperature(Context<TState> &c)
     if (dE >= 0) {
         const double t = -dE / std::log(c.settings.init_p_acceptance);
         c.init_t_log.push_back(t);
-        c.init_state_i++;
     }
 }
 
@@ -545,10 +541,9 @@ void cool_at_rate(Context<TState> &c)
         // ref:
         // https://www.cicirello.org/publications/CP2007-Autonomous-Search-Workshop.pdf
         c.temperature =
-                c.init_t_log[0] *
-                std::pow(c.settings.cooling_rate,
-                         static_cast<int>((double)c.cooling_i /
-                                          c.settings.cooling_round_len));
+                c.t_max * std::pow(c.settings.cooling_rate,
+                                   std::floor(c.cooling_i /
+                                              c.settings.cooling_round_len));
         c.cooling_i++;
 
         if (c.temperature < 0) {
