@@ -4,12 +4,14 @@
 
 #include "lapsa.hpp"
 
+size_t g_n_states = 1000000;
+size_t g_progress_update_period = 100;
 double g_init_p_acceptance = 0.97;
 size_t g_init_t_log_len = 100;
-double g_t_geom_k = (1 - 1e-4);
-double g_t_min_pct = 1e-10;
-size_t g_e_sma_len = 1000;
-size_t g_e_sma_past_i = 1000;
+double g_cooling_rate = (1 - 1e-4);
+size_t g_cooling_round_len = 1;
+size_t g_e_sma_fast_len = 50;
+size_t g_e_sma_slow_len = 100;
 
 const size_t g_state_data_size = 100;
 const std::string g_log_filename = "max_double_array_log.csv";
@@ -46,7 +48,7 @@ public:
         reset_energy();
     }
 
-    void perturbate(const std::function<double(void)> &rnd01)
+    void change(const std::function<double(void)> &rnd01)
     {
         assert(data.size() != 0);
         size_t changed_i = rnd01() * data.size();
@@ -59,13 +61,15 @@ public:
 int main()
 {
     lapsa::Settings s{};
+    s.n_states = g_n_states;
+    s.progress_update_period = g_progress_update_period;
     s.init_p_acceptance = g_init_p_acceptance;
     s.init_t_log_len = g_init_t_log_len;
-    s.t_geom_k = g_t_geom_k;
-    s.t_min_pct = g_t_min_pct;
+    s.cooling_rate = g_cooling_rate;
+    s.cooling_round_len = g_cooling_round_len;
     s.log_filename = g_log_filename;
-    s.e_sma_len = g_e_sma_len;
-    s.e_sma_past_i = g_e_sma_past_i;
+    s.e_sma_fast_len = g_e_sma_fast_len;
+    s.e_sma_slow_len = g_e_sma_slow_len;
 
     lapsa::StateMachine<MyState> sm{s};
     sm.init_functions = {
@@ -76,19 +80,21 @@ int main()
             lapsa::propose_new_state<MyState>,
             lapsa::record_init_temperature<MyState>,
             lapsa::select_init_temperature_as_max<MyState>,
+            lapsa::init_run_progress<MyState>,
             lapsa::check_init_done<MyState>,
     };
     sm.run_loop_functions = {
             lapsa::propose_new_state<MyState>,
             lapsa::record_energy<MyState>,
-            lapsa::update_temperature_with_geom_adaptive_cooling<MyState>,
+            lapsa::decide_to_cool_sma<MyState>,
+            lapsa::cool_at_rate<MyState>,
             lapsa::update_state<MyState>,
             lapsa::check_run_done<MyState>,
             lapsa::update_log<MyState>,
             lapsa::print_run_progress<MyState>,
     };
     sm.finalize_functions = {
-            lapsa::clear_progress<MyState>,
+            lapsa::clear_run_progress<MyState>,
             lapsa::print_stats<MyState>,
             lapsa::create_stats_file<MyState>,
     };
