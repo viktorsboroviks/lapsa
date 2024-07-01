@@ -186,7 +186,8 @@ struct Settings {
     size_t n_states = 1000000;
     double init_p_acceptance = 0.99;
     size_t init_t_log_len = 100;
-    double t_geom_k = 0.95;
+    double cooling_rate = 0.95;
+    size_t cooling_round_len = 1;
     size_t e_sma_fast_len = 50;
     size_t e_sma_slow_len = 200;
 
@@ -252,6 +253,8 @@ public:
     Random random{};
 
     double temperature = 0;
+    bool cool = false;
+    size_t cooling_i = 0;
     TState state;
     TState proposed_state;
 
@@ -524,17 +527,35 @@ void update_state(Context<TState> &c)
 }
 
 template <typename TState>
-void update_temperature_with_geom_cooling_schedule(Context<TState> &c)
+void decide_to_cool(Context<TState> &c)
 {
-    assert(c.settings.t_geom_k > 0);
-    assert(c.settings.t_geom_k < 1);
+    assert(!c.cool);
+    c.cool = true;
+}
+
+template <typename TState>
+void cool_at_rate(Context<TState> &c)
+{
+    assert(c.settings.cooling_rate > 0);
+    assert(c.settings.cooling_rate < 1);
     assert(c.temperature <= c.t_max);
     assert(c.temperature >= 0);
-    c.temperature *= c.settings.t_geom_k;
+    if (c.cool) {
+        // t = T0 * a^(i/R)
+        // ref:
+        // https://www.cicirello.org/publications/CP2007-Autonomous-Search-Workshop.pdf
+        c.temperature =
+                c.init_t_log[0] *
+                std::pow(c.settings.cooling_rate,
+                         static_cast<int>((double)c.cooling_i /
+                                          c.settings.cooling_round_len));
+        c.cooling_i++;
 
-    if (c.temperature < 0) {
-        c.temperature = 0;
+        if (c.temperature < 0) {
+            c.temperature = 0;
+        }
     }
+    c.cool = false;
 }
 
 template <typename TState>
@@ -554,8 +575,9 @@ void record_energy(Context<TState> &c)
 }
 
 template <typename TState>
-void update_temperature_with_geom_adaptive_cooling(Context<TState> &c)
+void decide_to_cool_sma(Context<TState> &c)
 {
+    assert(!c.cool);
     if (c.e_log.size() < c.e_log_len) {
         return;
     }
@@ -577,13 +599,7 @@ void update_temperature_with_geom_adaptive_cooling(Context<TState> &c)
     const double e_sma_slow = sum_e_sma_slow / c.settings.e_sma_slow_len;
 
     if (e_sma_fast > e_sma_slow) {
-        return;
-    }
-
-    c.temperature *= c.settings.t_geom_k;
-
-    if (c.temperature < 0) {
-        c.temperature = 0;
+        c.cool = true;
     }
 }
 

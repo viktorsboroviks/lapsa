@@ -8,7 +8,8 @@ size_t g_n_states = 1000000;
 size_t g_progress_update_period = 100;
 double g_init_p_acceptance = 0.97;
 size_t g_init_t_log_len = 100;
-double g_t_geom_k = (1 - 1e-4);
+double g_cooling_rate = (1 - 1e-4);
+size_t g_cooling_round_len = 1;
 size_t g_e_sma_fast_len = 50;
 size_t g_e_sma_slow_len = 100;
 
@@ -64,7 +65,8 @@ int main()
     s.progress_update_period = g_progress_update_period;
     s.init_p_acceptance = g_init_p_acceptance;
     s.init_t_log_len = g_init_t_log_len;
-    s.t_geom_k = g_t_geom_k;
+    s.cooling_rate = g_cooling_rate;
+    s.cooling_round_len = g_cooling_round_len;
     s.log_filename = g_log_filename;
     s.e_sma_fast_len = g_e_sma_fast_len;
     s.e_sma_slow_len = g_e_sma_slow_len;
@@ -84,7 +86,8 @@ int main()
     sm.run_loop_functions = {
             lapsa::propose_new_state<MyState>,
             lapsa::record_energy<MyState>,
-            lapsa::update_temperature_with_geom_adaptive_cooling<MyState>,
+            lapsa::decide_to_cool_sma<MyState>,
+            lapsa::cool_at_rate<MyState>,
             lapsa::update_state<MyState>,
             lapsa::check_run_done<MyState>,
             lapsa::update_log<MyState>,
