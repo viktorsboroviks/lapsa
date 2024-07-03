@@ -196,7 +196,6 @@ struct Settings {
     std::string stats_filename{"stats.txt"};
 };
 
-template <typename TData>
 class State {
 protected:
     Settings _settings;
@@ -210,8 +209,6 @@ protected:
     }
 
 public:
-    TData data;
-
     State(Settings &in_settings) :
         _settings(in_settings)
     {
