@@ -16,7 +16,10 @@ size_t g_e_sma_slow_len = 100;
 const size_t g_state_data_size = 100;
 const std::string g_log_filename = "max_double_array_log.csv";
 
-class MyState : lapsa::State<std::vector<double>> {
+class MyState : lapsa::State {
+private:
+    std::vector<double> data;
+
 public:
     MyState(lapsa::Settings &in_settings) :
         State(in_settings)

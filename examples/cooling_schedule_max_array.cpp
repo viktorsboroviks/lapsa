@@ -9,12 +9,15 @@ size_t g_progress_update_period = 100;
 double g_init_p_acceptance = 0.97;
 size_t g_init_t_log_len = 100;
 double g_cooling_rate = (1 - 1e-4);
-size_t g_cooling_round_len = 100;
+size_t g_cooling_round_len = 1;
 
 const size_t g_state_data_size = 100;
 const std::string g_log_filename = "max_double_array_log.csv";
 
-class MyState : lapsa::State<std::vector<double>> {
+class MyState : lapsa::State {
+private:
+    std::vector<double> data;
+
 public:
     MyState(lapsa::Settings &in_settings) :
         State(in_settings)
