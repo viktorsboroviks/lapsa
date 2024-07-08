@@ -83,9 +83,12 @@ int main()
             lapsa::check_init_done<MyState>,
     };
     sm.run_loop_functions = {
-            lapsa::propose_new_state<MyState>,  lapsa::decide_to_cool<MyState>,
-            lapsa::cool_at_rate<MyState>,       lapsa::update_state<MyState>,
-            lapsa::check_run_done<MyState>,     lapsa::update_log<MyState>,
+            lapsa::propose_new_state<MyState>,
+            lapsa::decide_to_cool<MyState>,
+            lapsa::cool_at_rate<MyState>,
+            lapsa::update_state<MyState>,
+            lapsa::check_run_done<MyState>,
+            lapsa::update_log<MyState>,
             lapsa::print_run_progress<MyState>,
     };
     sm.finalize_functions = {
