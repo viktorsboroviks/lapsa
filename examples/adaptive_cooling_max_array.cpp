@@ -77,7 +77,7 @@ int main()
     lapsa::StateMachine<MyState> sm{s};
     sm.init_functions = {
             lapsa::init_log<MyState>,
-            lapsa::init_state<MyState>,
+            lapsa::randomize_state<MyState>,
     };
     sm.init_loop_functions = {
             lapsa::propose_new_state<MyState>,

@@ -440,7 +440,7 @@ void create_stats_file(Context<TState> &c)
 }
 
 template <typename TState>
-void init_state(Context<TState> &c)
+void randomize_state(Context<TState> &c)
 {
     assert(c.state_i == 1);
     c.state.randomize([&c]() { return c.random.rnd01(); });
