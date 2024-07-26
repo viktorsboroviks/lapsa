@@ -36,7 +36,4 @@ clean:
 	rm -rf `find . -name "*.txt"`
 
 distclean: clean
-	rm -rf lapsa
-	rm -rf grafiins
-	rm -rf rododendrs
-
+	m -rf rododendrs
