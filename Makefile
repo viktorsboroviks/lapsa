@@ -4,7 +4,7 @@ all: examples
 
 rododendrs:
 	git clone git@github.com:viktorsboroviks/rododendrs.git
-	cd rododendrs; git checkout v1.0
+	cd rododendrs; git checkout v1.1
 
 examples: \
 	cooling_schedule_max_array.o \
