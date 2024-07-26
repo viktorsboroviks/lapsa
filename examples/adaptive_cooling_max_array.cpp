@@ -3,6 +3,7 @@
 #include <vector>
 
 #include "lapsa.hpp"
+#include "rododendrs.hpp"
 
 size_t g_n_states = 1000000;
 size_t g_progress_update_period = 100;
@@ -18,22 +19,22 @@ const std::string g_log_filename = "max_double_array_log.csv";
 
 class MyState : lapsa::State {
 private:
-    std::vector<double> data;
+    std::vector<double> _data;
 
 public:
     MyState(lapsa::Settings &in_settings) :
         State(in_settings)
     {
-        data.resize(g_state_data_size);
+        _data.resize(g_state_data_size);
     }
 
     double get_energy()
     {
         // if energy not calculated, do it now and store the result
         if (!_energy_calculated) {
-            assert(data.size() != 0);
+            assert(_data.size() != 0);
             _energy = 0;
-            for (auto &d : data) {
+            for (auto &d : _data) {
                 _energy -= d;
             }
         }
@@ -41,21 +42,21 @@ public:
         return _energy;
     }
 
-    void randomize(const std::function<double(void)> &rnd01)
+    void randomize()
     {
-        assert(data.size() != 0);
-        for (auto &d : data) {
-            d = rnd01();
+        assert(_data.size() != 0);
+        for (auto &d : _data) {
+            d = rododendrs::rnd01();
         }
 
         reset_energy();
     }
 
-    void change(const std::function<double(void)> &rnd01)
+    void change()
     {
-        assert(data.size() != 0);
-        size_t changed_i = rnd01() * data.size();
-        data[changed_i] = rnd01();
+        assert(_data.size() != 0);
+        size_t changed_i = rododendrs::rnd01() * _data.size();
+        _data[changed_i] = rododendrs::rnd01();
 
         reset_energy();
     }

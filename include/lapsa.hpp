@@ -7,9 +7,7 @@
 #include <iomanip>
 #include <iostream>
 #include <map>
-#include <mutex>
 #include <ostream>
-#include <random>
 #include <vector>
 
 #include "rododendrs.hpp"
@@ -189,21 +187,18 @@ public:
         return -1.0;
     }
 
-    virtual void randomize(const std::function<double(void)> &rnd01)
+    virtual void randomize()
     {
         reset_energy();
-
-        (void)rnd01();
         std::cout << "error: randomize method not implemented" << std::endl;
     }
 
-    virtual void change(const std::function<double(void)> &rnd01)
+    virtual void change()
     {
         reset_energy();
 
         // this method is very individual-specific, so to not overthink it
         // I leave it virtual
-        (void)rnd01;
         std::cout << "error: change method not implemented" << std::endl;
     }
 };
@@ -212,7 +207,6 @@ template <typename TState>
 class Context {
 public:
     Settings settings;
-    rododendrs::Random random{};
 
     double temperature = 0;
     bool cool = false;
@@ -408,14 +402,14 @@ template <typename TState>
 void randomize_state(Context<TState> &c)
 {
     assert(c.state_i == 1);
-    c.state.randomize([&c]() { return c.random.rnd01(); });
+    c.state.randomize();
 }
 
 template <typename TState>
 void propose_new_state(Context<TState> &c)
 {
     c.proposed_state = c.state;
-    c.proposed_state.change([&c]() { return c.random.rnd01(); });
+    c.proposed_state.change();
 }
 
 template <typename TState>
@@ -430,7 +424,8 @@ void record_init_temperature(Context<TState> &c)
     // - only for cases where new state is worse and we need
     //   to use the p_acceptance
     // - smaller energy = better
-    std::cout << "debug: c.init_t_log.size()=" << c.init_t_log.size() << std::endl;
+    std::cout << "debug: c.init_t_log.size()=" << c.init_t_log.size()
+              << std::endl;
     assert(c.init_t_log.size() < c.settings.init_t_log_len);
 
     const double dE = c.proposed_state.get_energy() - c.state.get_energy();
@@ -481,7 +476,7 @@ void update_state(Context<TState> &c)
     // dE >= 0
     const double p_acceptance = std::exp(-dE / c.temperature);
     assert(p_acceptance <= 1);
-    if (c.random.rnd01() <= p_acceptance) {
+    if (rododendrs::rnd01() <= p_acceptance) {
         c.state = c.proposed_state;
         return;
     }
