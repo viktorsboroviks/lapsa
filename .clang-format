@@ -4,6 +4,7 @@
 # https://github.com/numpy/numpy/blob/main/.clang-format
 # and modified by varga
 BasedOnStyle: Google
+BinPackArguments: false
 BinPackParameters: false
 AccessModifierOffset: -4
 AlignAfterOpenBracket: Align

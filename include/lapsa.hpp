@@ -7,10 +7,10 @@
 #include <iomanip>
 #include <iostream>
 #include <map>
-#include <mutex>
 #include <ostream>
-#include <random>
 #include <vector>
+
+#include "rododendrs.hpp"
 
 namespace lapsa {
 
@@ -23,43 +23,6 @@ std::string seconds_to_hhmmss_string(const double seconds)
     ss << ":" << std::setw(2) << std::setfill('0') << (int)seconds % 60;
     return ss.str();
 }
-
-class Random {
-    // thread-safe implementation of rnd01() borrowed from
-    // https://github.com/Arash-codedev/openGA/blob/master/README.md
-    // assuming those people knew what they were doing
-private:
-    std::mutex mtx_rand;
-    std::mt19937_64 rng;
-    std::uniform_real_distribution<double> unif_dist;
-
-public:
-    Random()
-    {
-        // initialize the random number generator with time-dependent seed
-        uint64_t timeSeed = std::chrono::high_resolution_clock::now()
-                                    .time_since_epoch()
-                                    .count();
-        std::seed_seq ss{uint32_t(timeSeed & 0xffffffff),
-                         uint32_t(timeSeed >> 32)};
-        rng.seed(ss);
-        std::uniform_real_distribution<double> unif(0, 1);
-    }
-
-    Random(const Random &other)
-    {
-        // construct a new object on copy
-        (void)other;
-        Random();
-    }
-
-    double rnd01(void)
-    {
-        // prevent data race between threads
-        std::lock_guard<std::mutex> lock(mtx_rand);
-        return unif_dist(rng);
-    }
-};
 
 class Progress {
 private:
@@ -224,21 +187,18 @@ public:
         return -1.0;
     }
 
-    virtual void randomize(const std::function<double(void)> &rnd01)
+    virtual void randomize()
     {
         reset_energy();
-
-        (void)rnd01();
         std::cout << "error: randomize method not implemented" << std::endl;
     }
 
-    virtual void change(const std::function<double(void)> &rnd01)
+    virtual void change()
     {
         reset_energy();
 
         // this method is very individual-specific, so to not overthink it
         // I leave it virtual
-        (void)rnd01;
         std::cout << "error: change method not implemented" << std::endl;
     }
 };
@@ -247,7 +207,6 @@ template <typename TState>
 class Context {
 public:
     Settings settings;
-    Random random{};
 
     double temperature = 0;
     bool cool = false;
@@ -440,17 +399,17 @@ void create_stats_file(Context<TState> &c)
 }
 
 template <typename TState>
-void init_state(Context<TState> &c)
+void randomize_state(Context<TState> &c)
 {
     assert(c.state_i == 1);
-    c.state.randomize([&c]() { return c.random.rnd01(); });
+    c.state.randomize();
 }
 
 template <typename TState>
 void propose_new_state(Context<TState> &c)
 {
     c.proposed_state = c.state;
-    c.proposed_state.change([&c]() { return c.random.rnd01(); });
+    c.proposed_state.change();
 }
 
 template <typename TState>
@@ -465,9 +424,12 @@ void record_init_temperature(Context<TState> &c)
     // - only for cases where new state is worse and we need
     //   to use the p_acceptance
     // - smaller energy = better
+    std::cout << "debug: c.init_t_log.size()=" << c.init_t_log.size()
+              << std::endl;
     assert(c.init_t_log.size() < c.settings.init_t_log_len);
 
     const double dE = c.proposed_state.get_energy() - c.state.get_energy();
+    std::cout << "debug: dE=" << dE << std::endl;
     if (dE >= 0) {
         const double t = -dE / std::log(c.settings.init_p_acceptance);
         c.init_t_log.push_back(t);
@@ -488,6 +450,7 @@ void select_init_temperature_as_max(Context<TState> &c)
     // t_max = max(init_t at init_p_acceptance)
     c.t_max = *max_element(c.init_t_log.begin(), c.init_t_log.end());
     c.temperature = c.t_max;
+    std::cout << "debug: c.t_max=" << c.t_max << std::endl;
 }
 
 template <typename TState>
@@ -513,7 +476,7 @@ void update_state(Context<TState> &c)
     // dE >= 0
     const double p_acceptance = std::exp(-dE / c.temperature);
     assert(p_acceptance <= 1);
-    if (c.random.rnd01() <= p_acceptance) {
+    if (rododendrs::rnd01() <= p_acceptance) {
         c.state = c.proposed_state;
         return;
     }
