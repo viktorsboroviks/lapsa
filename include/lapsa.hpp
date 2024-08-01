@@ -424,12 +424,9 @@ void record_init_temperature(Context<TState> &c)
     // - only for cases where new state is worse and we need
     //   to use the p_acceptance
     // - smaller energy = better
-    std::cout << "debug: c.init_t_log.size()=" << c.init_t_log.size()
-              << std::endl;
     assert(c.init_t_log.size() < c.settings.init_t_log_len);
 
     const double dE = c.proposed_state.get_energy() - c.state.get_energy();
-    std::cout << "debug: dE=" << dE << std::endl;
     if (dE >= 0) {
         const double t = -dE / std::log(c.settings.init_p_acceptance);
         c.init_t_log.push_back(t);
@@ -450,7 +447,6 @@ void select_init_temperature_as_max(Context<TState> &c)
     // t_max = max(init_t at init_p_acceptance)
     c.t_max = *max_element(c.init_t_log.begin(), c.init_t_log.end());
     c.temperature = c.t_max;
-    std::cout << "debug: c.t_max=" << c.t_max << std::endl;
 }
 
 template <typename TState>
