@@ -8,6 +8,7 @@ BinPackArguments: false
 BinPackParameters: false
 AccessModifierOffset: -4
 AlignAfterOpenBracket: Align
+AlignConsecutiveAssignments: AcrossComments
 AllowShortBlocksOnASingleLine: Empty
 AllowShortEnumsOnASingleLine: false
 AllowShortFunctionsOnASingleLine: Empty

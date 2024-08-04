@@ -10,6 +10,7 @@
 #include <ostream>
 #include <vector>
 
+#include "iestade.hpp"
 #include "rododendrs.hpp"
 
 namespace lapsa {
@@ -30,12 +31,12 @@ private:
             std::chrono::steady_clock::now();
 
 public:
-    std::ostream &os = std::cerr;
+    std::ostream &os       = std::cerr;
     char c_opening_bracket = '[';
     char c_closing_bracket = ']';
-    char c_fill = '.';
-    char c_no_fill = ' ';
-    size_t c_bar_len = 10;
+    char c_fill            = '.';
+    char c_no_fill         = ' ';
+    size_t c_bar_len       = 10;
     size_t update_period;
     size_t n_min;
     size_t n_max;
@@ -119,7 +120,7 @@ public:
                 std::chrono::duration_cast<std::chrono::microseconds>(
                         now - last_update_time)
                         .count();
-        last_update_time = now;
+        last_update_time         = now;
         const size_t remaining_n = n_max - n;
         const double eta_s =
                 us_per_update_period / update_period * remaining_n / 1000000;
@@ -134,29 +135,36 @@ public:
     }
 };
 
-// base classes:
-// - Settings
-// - Context
-//   - holds all calculation data
-// - State
-// - StateMachine(Context)
-//   - init
-//   - init loop
-//   - run loop
-//   - closure
-
 struct Settings {
-    size_t n_states = 1000000;
+    size_t n_states          = 1000000;
     double init_p_acceptance = 0.99;
-    size_t init_t_log_len = 100;
-    double cooling_rate = 0.95;
+    size_t init_t_log_len    = 100;
+    double cooling_rate      = 0.95;
     size_t cooling_round_len = 1;
-    size_t e_sma_fast_len = 50;
-    size_t e_sma_slow_len = 200;
+    size_t e_sma_fast_len    = 50;
+    size_t e_sma_slow_len    = 200;
 
     size_t progress_update_period = 1;
-    std::string log_filename{""};
-    std::string stats_filename{"stats.txt"};
+    std::string log_filename      = "log.csv";
+    std::string stats_filename    = "stats.txt";
+
+    Settings() {}
+
+    // clang-format off
+    Settings(const std::string& config_filepath,
+             const std::string& key_path_prefix) :
+        n_states            (iestade::size_t_from_json(config_filepath, key_path_prefix + "/n_states")),
+        init_p_acceptance   (iestade::double_from_json(config_filepath, key_path_prefix + "/init_p_acceptance")),
+        init_t_log_len      (iestade::size_t_from_json(config_filepath, key_path_prefix + "/init_t_log_len")),
+        cooling_rate        (iestade::double_from_json(config_filepath, key_path_prefix + "/cooling_rate")),
+        cooling_round_len   (iestade::size_t_from_json(config_filepath, key_path_prefix + "/cooling_round_len")),
+        e_sma_fast_len      (iestade::size_t_from_json(config_filepath, key_path_prefix + "/e_sma_fast_len")),
+        e_sma_slow_len      (iestade::size_t_from_json(config_filepath, key_path_prefix + "/e_sma_slow_len")),
+        log_filename        (iestade::string_from_json(config_filepath, key_path_prefix + "/log_filename")),
+        stats_filename      (iestade::string_from_json(config_filepath, key_path_prefix + "/stats_filename"))
+    {
+    }
+    // clang-format on
 };
 
 class State {
@@ -168,7 +176,7 @@ protected:
     void reset_energy()
     {
         _energy_calculated = false;
-        _energy = -1;
+        _energy            = -1;
     }
 
 public:
@@ -209,8 +217,8 @@ public:
     Settings settings;
 
     double temperature = 0;
-    bool cool = false;
-    size_t cooling_i = 0;
+    bool cool          = false;
+    size_t cooling_i   = 0;
     TState state;
     TState proposed_state;
 
@@ -218,7 +226,7 @@ public:
     bool init_done = false;
 
     // important! states begin with 1st, not 0th
-    double t_max = 0;
+    double t_max   = 0;
     size_t state_i = 1;
     std::deque<double> e_log;
     size_t e_log_len;
@@ -245,7 +253,7 @@ public:
                 std::chrono::duration_cast<std::chrono::seconds>(stop_time -
                                                                  start_time)
                         .count();
-        const double state_s = state_i / runtime_s;
+        const double state_s         = state_i / runtime_s;
         const size_t first_col_width = 22;
         std::stringstream ss{};
         // standard parameters
@@ -355,8 +363,8 @@ template <typename TState>
 void init_run_progress(Context<TState> &c)
 {
     if (c.temperature > 0) {
-        c.run_progress.n_min = 1;
-        c.run_progress.n_max = c.settings.n_states;
+        c.run_progress.n_min         = 1;
+        c.run_progress.n_max         = c.settings.n_states;
         c.run_progress.update_period = c.settings.progress_update_period;
     }
 }
@@ -445,7 +453,7 @@ void select_init_temperature_as_max(Context<TState> &c)
     assert(c.t_max == 0);
 
     // t_max = max(init_t at init_p_acceptance)
-    c.t_max = *max_element(c.init_t_log.begin(), c.init_t_log.end());
+    c.t_max       = *max_element(c.init_t_log.begin(), c.init_t_log.end());
     c.temperature = c.t_max;
 }
 

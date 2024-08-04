@@ -1,34 +1,66 @@
-.PHONY: all examples format clean distclean
+.PHONY: \
+	all \
+	examples \
+	format \
+	clang-format \
+	jq-format \
+	clean \
+	distclean
 
 all: examples
+
+iestade:
+	git clone git@github.com:viktorsboroviks/iestade.git
+	cd iestade; git checkout v2.2
 
 rododendrs:
 	git clone git@github.com:viktorsboroviks/rododendrs.git
 	cd rododendrs; git checkout v1.1
 
 examples: \
-	cooling_schedule_max_array.o \
-	adaptive_cooling_max_array.o
+	max_array_cooling_schedule.o \
+	max_array_adaptive_cooling.o
 
-cooling_schedule_max_array.o: rododendrs examples/cooling_schedule_max_array.cpp
+max_array_cooling_schedule.o: \
+		iestade \
+		rododendrs \
+		examples/max_array_cooling_schedule.cpp
 	g++ -Wall -Wextra -Werror -Wpedantic \
 		-std=c++20 -O3 \
 		-I./include \
+		-I./iestade/include \
 		-I./rododendrs/include \
-		examples/cooling_schedule_max_array.cpp -o $@
+		examples/max_array_cooling_schedule.cpp -o $@
 
-adaptive_cooling_max_array.o: rododendrs examples/adaptive_cooling_max_array.cpp
+max_array_adaptive_cooling.o: \
+		iestade \
+		rododendrs \
+		examples/max_array_adaptive_cooling.cpp
 	g++ -Wall -Wextra -Werror -Wpedantic \
 		-std=c++20 -O3 \
 		-I./include \
+		-I./iestade/include \
 		-I./rododendrs/include \
-		examples/adaptive_cooling_max_array.cpp -o $@
+		examples/max_array_adaptive_cooling.cpp -o $@
 
-format: \
+format: clang-format jq-format
+
+clang-format: \
 		include/lapsa.hpp \
-		examples/cooling_schedule_max_array.cpp \
-		examples/adaptive_cooling_max_array.cpp
+		examples/max_array_cooling_schedule.cpp \
+		examples/max_array_adaptive_cooling.cpp
 	clang-format -i $^
+
+jq-format: \
+		config.json \
+		examples/max_array_cooling_schedule_config.json \
+		examples/max_array_adaptive_cooling_config.json
+	jq . config.json | \
+		sponge config.json
+	jq . examples/max_array_cooling_schedule_config.json | \
+		sponge examples/max_array_cooling_schedule_config.json
+	jq . examples/max_array_adaptive_cooling_config.json | \
+		sponge examples/max_array_adaptive_cooling_config.json
 
 clean:
 	rm -rf `find . -name "*.o"`
@@ -36,4 +68,5 @@ clean:
 	rm -rf `find . -name "*.txt"`
 
 distclean: clean
+	m -rf iestade
 	m -rf rododendrs
