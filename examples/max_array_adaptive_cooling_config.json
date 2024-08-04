@@ -9,7 +9,7 @@
     "e_sma_slow_len": 100,
     "progress_update_period": 100,
     "log_filename": "log.csv",
-    "stats_filename": "stats.csv"
+    "stats_filename": "stats.txt"
   },
   "state": {
     "data_size": 100
