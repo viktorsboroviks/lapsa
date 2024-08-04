@@ -1,0 +1,14 @@
+{
+  "lapsa": {
+    "n_states": 1000000,
+    "init_p_acceptance": 0.97,
+    "init_t_log_len": 100,
+    "cooling_rate": 0.9999,
+    "cooling_round_len": 1,
+    "e_sma_fast_len": 50,
+    "e_sma_slow_len": 100,
+    "progress_update_period": 100,
+    "log_filename": "log.csv",
+    "stats_filename": "stats.txt"
+  }
+}

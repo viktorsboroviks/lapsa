@@ -1,21 +1,12 @@
-// #include <sstream>
 #include <string>
 #include <vector>
 
+#include "iestade.hpp"
 #include "lapsa.hpp"
 #include "rododendrs.hpp"
 
-size_t g_n_states = 1000000;
-size_t g_progress_update_period = 100;
-double g_init_p_acceptance = 0.97;
-size_t g_init_t_log_len = 100;
-double g_cooling_rate = (1 - 1e-4);
-size_t g_cooling_round_len = 1;
-size_t g_e_sma_fast_len = 50;
-size_t g_e_sma_slow_len = 100;
-
-const size_t g_state_data_size = 100;
-const std::string g_log_filename = "max_double_array_log.csv";
+const std::string CONFIG_PATH =
+        "examples/max_array_adaptive_cooling_config.json";
 
 class MyState : lapsa::State {
 private:
@@ -23,9 +14,9 @@ private:
 
 public:
     MyState(lapsa::Settings &in_settings) :
-        State(in_settings)
+        State(in_settings),
+        _data(iestade::size_t_from_json(CONFIG_PATH, "state/data_size"))
     {
-        _data.resize(g_state_data_size);
     }
 
     double get_energy()
@@ -64,17 +55,7 @@ public:
 
 int main()
 {
-    lapsa::Settings s{};
-    s.n_states = g_n_states;
-    s.progress_update_period = g_progress_update_period;
-    s.init_p_acceptance = g_init_p_acceptance;
-    s.init_t_log_len = g_init_t_log_len;
-    s.cooling_rate = g_cooling_rate;
-    s.cooling_round_len = g_cooling_round_len;
-    s.log_filename = g_log_filename;
-    s.e_sma_fast_len = g_e_sma_fast_len;
-    s.e_sma_slow_len = g_e_sma_slow_len;
-
+    lapsa::Settings s(CONFIG_PATH, "lapsa");
     lapsa::StateMachine<MyState> sm{s};
     sm.init_functions = {
             lapsa::init_log<MyState>,
