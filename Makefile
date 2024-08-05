@@ -11,7 +11,7 @@ all: examples
 
 iestade:
 	git clone git@github.com:viktorsboroviks/iestade.git
-	cd iestade; git checkout v2.2
+	cd iestade; git checkout v2.3
 
 rododendrs:
 	git clone git@github.com:viktorsboroviks/rododendrs.git
