@@ -8,6 +8,7 @@
 #include <iostream>
 #include <map>
 #include <ostream>
+#include <queue>
 #include <vector>
 
 #include "iestade.hpp"
@@ -148,6 +149,8 @@ struct Settings {
     std::string log_filename      = "log.csv";
     std::string stats_filename    = "stats.txt";
 
+    size_t n_reports = 0;
+
     Settings() {}
 
     // clang-format off
@@ -161,7 +164,8 @@ struct Settings {
         e_sma_fast_len      (iestade::size_t_from_json(config_filepath, key_path_prefix + "/e_sma_fast_len")),
         e_sma_slow_len      (iestade::size_t_from_json(config_filepath, key_path_prefix + "/e_sma_slow_len")),
         log_filename        (iestade::string_from_json(config_filepath, key_path_prefix + "/log_filename")),
-        stats_filename      (iestade::string_from_json(config_filepath, key_path_prefix + "/stats_filename"))
+        stats_filename      (iestade::string_from_json(config_filepath, key_path_prefix + "/stats_filename")),
+        n_reports           (iestade::size_t_from_json(config_filepath, key_path_prefix + "/n_reports", true, 0))
     {
     }
     // clang-format on
@@ -217,7 +221,7 @@ public:
     Settings settings;
 
     double temperature = 0;
-    bool cool          = false;
+    bool do_cool       = false;
     size_t cooling_i   = 0;
     TState state;
     TState proposed_state;
@@ -238,6 +242,9 @@ public:
 
     Progress run_progress;
     std::ofstream log_f;
+
+    std::queue<size_t> report_states_queue;
+    bool do_report = false;
 
     Context(Settings &s) :
         settings(s),
@@ -489,8 +496,8 @@ void update_state(Context<TState> &c)
 template <typename TState>
 void decide_to_cool(Context<TState> &c)
 {
-    assert(!c.cool);
-    c.cool = true;
+    assert(!c.do_cool);
+    c.do_cool = true;
 }
 
 template <typename TState>
@@ -500,7 +507,7 @@ void cool_at_rate(Context<TState> &c)
     assert(c.settings.cooling_rate < 1);
     assert(c.temperature <= c.t_max);
     assert(c.temperature >= 0);
-    if (c.cool) {
+    if (c.do_cool) {
         // t = T0 * a^(i/R)
         // ref:
         // https://www.cicirello.org/publications/CP2007-Autonomous-Search-Workshop.pdf
@@ -514,7 +521,7 @@ void cool_at_rate(Context<TState> &c)
             c.temperature = 0;
         }
     }
-    c.cool = false;
+    c.do_cool = false;
 }
 
 template <typename TState>
@@ -536,7 +543,7 @@ void record_energy(Context<TState> &c)
 template <typename TState>
 void decide_to_cool_sma(Context<TState> &c)
 {
-    assert(!c.cool);
+    assert(!c.do_cool);
     if (c.e_log.size() < c.e_log_len) {
         return;
     }
@@ -558,7 +565,7 @@ void decide_to_cool_sma(Context<TState> &c)
     const double e_sma_slow = sum_e_sma_slow / c.settings.e_sma_slow_len;
 
     if (e_sma_fast > e_sma_slow) {
-        c.cool = true;
+        c.do_cool = true;
     }
 }
 
@@ -571,6 +578,77 @@ void check_run_done(Context<TState> &c)
     if (c.state_i == c.settings.n_states) {
         c.run_done = true;
     }
+}
+
+template <typename TState>
+void init_report_linear(Context<TState> &c)
+{
+    // report state queue holds the
+    // numbers of all states that must produce a report
+    // - always starts with 1
+    // - always end n_states
+    assert(c.report_states_queue.empty());
+    c.report_states_queue.push(1);
+    assert(c.settings.n_reports > 0);
+    const double report_step =
+            c.settings.n_states / (double)(c.settings.n_reports - 1);
+    for (size_t report_i = 2; report_i < c.settings.n_reports; report_i++) {
+        c.report_states_queue.push(
+                static_cast<size_t>(report_step * report_i));
+    }
+    c.report_states_queue.push(c.settings.n_states);
+    assert(c.report_states_queue.size() == c.settings.n_reports);
+}
+
+template <typename TState>
+void init_report_at_rate(Context<TState> &c)
+{
+    // report state queue holds the
+    // numbers of all states that must produce a report
+    // - always starts with 1 and ends with n_states
+    assert(c.report_states_queue.empty());
+
+    // from
+    // a k^0 = 1
+    // a k^(n_reports-1) = n_states,
+    // where a = 1, reports = [0, n_reports-1]
+    // k ^ (n_reports-1) = n_states/a
+    // k = (n_states/a) ^ 1/(n_reports-1)
+    // k = n_states ^ 1/(n_reports-1)
+    assert(c.settings.n_reports > 0);
+    const double float_err_compensation = 1e-5;
+    const double report_rate            = std::pow(
+            c.settings.n_states, 1 / (double)(c.settings.n_reports - 1));
+
+    double state_i = 1;
+    for (size_t report_i = 1; report_i <= c.settings.n_reports; report_i++) {
+#ifndef NDEBUG
+        if (report_i == 1) {
+            assert(static_cast<size_t>(state_i) == 1);
+        }
+        if (report_i == c.settings.n_reports) {
+            assert(static_cast<size_t>(state_i + float_err_compensation) ==
+                   c.settings.n_states);
+        }
+#endif
+        c.report_states_queue.push(
+                static_cast<size_t>(state_i + float_err_compensation));
+        state_i *= report_rate;
+    }
+    assert(c.report_states_queue.size() == c.settings.n_reports);
+}
+
+template <typename TState>
+void decide_to_report(Context<TState> &c)
+{
+    if (!c.report_states_queue.empty() &&
+        c.state_i >= c.report_states_queue.front()) {
+        c.report_states_queue.pop();
+        c.do_report = true;
+        return;
+    }
+
+    c.do_report = false;
 }
 
 }  // namespace lapsa
