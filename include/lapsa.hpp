@@ -137,13 +137,14 @@ public:
 };
 
 struct Settings {
-    size_t n_states          = 1000000;
-    double init_p_acceptance = 0.99;
-    size_t init_t_log_len    = 100;
-    double cooling_rate      = 0.95;
-    size_t cooling_round_len = 1;
-    size_t e_sma_fast_len    = 50;
-    size_t e_sma_slow_len    = 200;
+    size_t n_states            = 1000000;
+    double init_p_acceptance   = 0.99;
+    size_t init_t_log_len      = 100;
+    double cooling_rate        = 0.95;
+    size_t cooling_round_len   = 1;
+    size_t e_sma_fast_len      = 50;
+    size_t e_sma_slow_len      = 200;
+    size_t e_sma_update_period = 100;
 
     size_t progress_update_period = 1;
     std::string log_filename      = "log.csv";
@@ -163,6 +164,7 @@ struct Settings {
         cooling_round_len   (iestade::size_t_from_json(config_filepath, key_path_prefix + "/cooling_round_len")),
         e_sma_fast_len      (iestade::size_t_from_json(config_filepath, key_path_prefix + "/e_sma_fast_len")),
         e_sma_slow_len      (iestade::size_t_from_json(config_filepath, key_path_prefix + "/e_sma_slow_len")),
+        e_sma_update_period (iestade::size_t_from_json(config_filepath, key_path_prefix + "/e_sma_update_period")),
         log_filename        (iestade::string_from_json(config_filepath, key_path_prefix + "/log_filename")),
         stats_filename      (iestade::string_from_json(config_filepath, key_path_prefix + "/stats_filename")),
         n_reports           (iestade::size_t_from_json(config_filepath, key_path_prefix + "/n_reports", true, 0))
@@ -543,8 +545,14 @@ void record_energy(Context<TState> &c)
 template <typename TState>
 void decide_to_cool_sma(Context<TState> &c)
 {
+    assert(c.settings.e_sma_fast_len < c.settings.e_sma_slow_len);
     assert(!c.do_cool);
     if (c.e_log.size() < c.e_log_len) {
+        return;
+    }
+
+    assert(c.settings.e_sma_update_period > 0);
+    if (c.state_i % c.settings.e_sma_update_period) {
         return;
     }
 

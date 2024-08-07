@@ -7,6 +7,7 @@
     "cooling_round_len": 1,
     "e_sma_fast_len": 50,
     "e_sma_slow_len": 100,
+    "e_sma_update_period": 1,
     "progress_update_period": 100,
     "log_filename": "log.csv",
     "stats_filename": "stats.txt"
