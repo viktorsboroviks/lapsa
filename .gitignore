@@ -1,5 +1,7 @@
 **.o
 **.csv
 **.txt
+**.svg
+**/__pycache__
 iestade
 rododendrs

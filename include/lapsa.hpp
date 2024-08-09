@@ -444,8 +444,9 @@ void record_init_temperature(Context<TState> &c)
     assert(c.init_t_log.size() < c.settings.init_t_log_len);
 
     const double dE = c.proposed_state.get_energy() - c.state.get_energy();
-    if (dE >= 0) {
+    if (dE > 0) {
         const double t = -dE / std::log(c.settings.init_p_acceptance);
+        assert(t > 0);
         c.init_t_log.push_back(t);
     }
 }
@@ -464,13 +465,13 @@ void select_init_temperature_as_max(Context<TState> &c)
     // t_max = max(init_t at init_p_acceptance)
     c.t_max       = *max_element(c.init_t_log.begin(), c.init_t_log.end());
     c.temperature = c.t_max;
+    assert(c.temperature > 0);
 }
 
 template <typename TState>
 void check_init_done(Context<TState> &c)
 {
-    if (c.temperature > 0) {
-        assert(c.init_t_log.size() == c.settings.init_t_log_len);
+    if (c.init_t_log.size() == c.settings.init_t_log_len) {
         c.init_done = true;
     }
 }

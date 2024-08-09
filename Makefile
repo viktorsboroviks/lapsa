@@ -1,9 +1,11 @@
 .PHONY: \
 	all \
 	examples \
+	plot \
 	format \
 	clang-format \
 	jq-format \
+	black-format \
 	clean \
 	distclean
 
@@ -43,7 +45,12 @@ max_array_adaptive_cooling.o: \
 		-I./rododendrs/include \
 		examples/max_array_adaptive_cooling.cpp -o $@
 
-format: clang-format jq-format
+plot_examples: examples
+	PYTHONPATH=${PYTHONPATH}:python python3 \
+		examples/max_array_adaptive_cooling_plot.py \
+		--config examples/max_array_adaptive_cooling_config.json
+
+format: clang-format jq-format black-format
 
 clang-format: \
 		include/lapsa.hpp \
@@ -61,6 +68,11 @@ jq-format: \
 		sponge examples/max_array_cooling_schedule_config.json
 	jq . examples/max_array_adaptive_cooling_config.json | \
 		sponge examples/max_array_adaptive_cooling_config.json
+
+black-format: \
+		python/lapsa.py \
+		examples/max_array_adaptive_cooling_plot.py
+	black $^
 
 clean:
 	rm -rf `find . -name "*.o"`

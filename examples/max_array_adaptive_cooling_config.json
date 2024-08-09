@@ -14,5 +14,9 @@
   },
   "state": {
     "data_size": 100
+  },
+  "plot": {
+    "data_csv": "log.csv",
+    "output_file": "output.svg"
   }
 }
