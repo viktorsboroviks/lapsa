@@ -23,9 +23,14 @@ if args.config_section:
     config_json = config_json[args.config_section]
 
 subplot = lapsa.energy_temperature_subplot(
-    data_csv=config_json["data_csv"], col=1, row=1, data_col_i="state_i", subtitle=None
+    data_csv=config_json["data_csv"],
+    col=1,
+    row=1,
+    data_col_i="state_i",
+    subtitle=None,
 )
 
-vplot.PlotlyPlot(title_text="max array (adaptive cooling)", subplots=[subplot]).to_file(
-    config_json["output_file"]
-)
+vplot.PlotlyPlot(
+    title_text="max array (adaptive cooling)",
+    subplots=[subplot],
+).to_file(config_json["output_file"])
