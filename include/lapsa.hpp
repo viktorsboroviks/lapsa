@@ -1,3 +1,4 @@
+#include <atomic>
 #include <cassert>
 #include <chrono>
 #include <cmath>
@@ -9,6 +10,7 @@
 #include <map>
 #include <ostream>
 #include <queue>
+#include <thread>
 #include <vector>
 
 #include "iestade.hpp"
@@ -228,6 +230,9 @@ public:
     TState state;
     TState proposed_state;
 
+    std::atomic<bool> q_pressed    = false;
+    std::atomic<bool> stop_threads = false;
+
     std::vector<double> init_t_log;
     bool init_done = false;
 
@@ -268,7 +273,6 @@ public:
         // standard parameters
         ss << std::left << std::setw(first_col_width) << "states" << state_i
            << std::endl;
-        ss << std::endl;
         // runtime stats
         ss << std::left << std::setw(first_col_width) << "runtime"
            << seconds_to_hhmmss_string(runtime_s) << std::endl;
@@ -284,7 +288,19 @@ template <typename TState>
 class StateMachine {
 private:
     typedef std::function<void(Context<TState> &)> state_function_t;
-    Context<TState> context;
+    Context<TState> _context;
+
+    void _input_handler()
+    {
+        while (!_context.stop_threads.load()) {
+            if (std::cin.get() == 'q') {
+                _context.q_pressed.store(true);
+                _context.run_progress.os_clear_line();
+                std::cout << "q entered" << std::endl;
+                return;
+            }
+        }
+    }
 
 public:
     std::vector<state_function_t> init_functions{};
@@ -293,49 +309,58 @@ public:
     std::vector<state_function_t> finalize_functions{};
 
     StateMachine(Settings &s) :
-        context(s)
+        _context(s)
     {
     }
 
     void run()
     {
-        context.start_time = std::chrono::steady_clock::now();
+        std::cout << "[enter q to interrupt]" << std::endl;
+        std::thread input_thread =
+                std::thread(&StateMachine::_input_handler, this);
+
+        _context.start_time = std::chrono::steady_clock::now();
         for (state_function_t &f : init_functions) {
-            f(context);
+            f(_context);
         }
         auto cycle_begin_time = std::chrono::steady_clock::now();
-        while (init_loop_functions.size() > 0 && !context.init_done) {
+        while (init_loop_functions.size() > 0 && !_context.init_done) {
             for (state_function_t &f : init_loop_functions) {
-                if (context.init_done) {
+                if (_context.init_done) {
                     break;
                 }
-                f(context);
+                f(_context);
             }
             auto cycle_end_time = std::chrono::steady_clock::now();
-            context.cycle_time_us =
+            _context.cycle_time_us =
                     std::chrono::duration_cast<std::chrono::microseconds>(
                             cycle_end_time - cycle_begin_time)
                             .count();
             cycle_begin_time = cycle_end_time;
         }
-        while (run_loop_functions.size() > 0 && !context.run_done) {
+        while (run_loop_functions.size() > 0 && !_context.run_done) {
             for (state_function_t &f : run_loop_functions) {
-                if (context.run_done) {
+                if (_context.run_done) {
                     break;
                 }
-                f(context);
+                f(_context);
             }
             auto cycle_end_time = std::chrono::steady_clock::now();
-            context.cycle_time_us =
+            _context.cycle_time_us =
                     std::chrono::duration_cast<std::chrono::microseconds>(
                             cycle_end_time - cycle_begin_time)
                             .count();
             cycle_begin_time = cycle_end_time;
         }
-        context.stop_time = std::chrono::steady_clock::now();
+        _context.stop_time = std::chrono::steady_clock::now();
         for (state_function_t &f : finalize_functions) {
-            f(context);
+            f(_context);
         }
+        if (!_context.q_pressed.load()) {
+            std::cout << "[press enter to quit]" << std::flush;
+        }
+        _context.stop_threads.store(true);
+        input_thread.join();
     }
 };
 
@@ -471,7 +496,7 @@ void select_init_temperature_as_max(Context<TState> &c)
 template <typename TState>
 void check_init_done(Context<TState> &c)
 {
-    if (c.init_t_log.size() == c.settings.init_t_log_len) {
+    if (c.init_t_log.size() == c.settings.init_t_log_len || c.q_pressed) {
         c.init_done = true;
     }
 }
@@ -584,7 +609,7 @@ void check_run_done(Context<TState> &c)
     assert(c.temperature <= c.t_max);
     assert(c.temperature >= 0);
     assert(!c.run_done);
-    if (c.state_i == c.settings.n_states) {
+    if (c.state_i == c.settings.n_states || c.q_pressed) {
         c.run_done = true;
     }
 }
