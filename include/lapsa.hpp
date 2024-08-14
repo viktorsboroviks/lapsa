@@ -601,7 +601,8 @@ void init_report_linear(Context<TState> &c)
     assert(c.settings.n_reports > 0);
     const double report_step =
             c.settings.n_states / (double)(c.settings.n_reports - 1);
-    for (size_t report_i = 2; report_i < c.settings.n_reports; report_i++) {
+    for (size_t report_i = 1; report_i < c.settings.n_reports - 1;
+         report_i++) {
         c.report_states_queue.push(
                 static_cast<size_t>(report_step * report_i));
     }

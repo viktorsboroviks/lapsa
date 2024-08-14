@@ -5,7 +5,7 @@ DATA_COL_I = "i"
 DATA_COL_T = "temperature"
 DATA_COL_E = "energy"
 COMPRESS_X_TO_N = 1000
-SUBTITLE = "energy"
+SUBTITLE_TEXT = "energy"
 SUBTITLE_X = -0.03
 SUBTITLE_Y = -0.07
 
@@ -19,7 +19,7 @@ def energy_temperature_subplot(
     data_col_t=DATA_COL_T,
     data_col_e=DATA_COL_E,
     compress_x_to_n=COMPRESS_X_TO_N,
-    subtitle=SUBTITLE,
+    subtitle_text=SUBTITLE_TEXT,
     subtitle_x=SUBTITLE_X,
     subtitle_y=SUBTITLE_Y,
 ):
@@ -46,7 +46,7 @@ def energy_temperature_subplot(
     return vplot.Subplot(
         col=col,
         row=row,
-        subtitle_text=subtitle,
+        subtitle_text=subtitle_text,
         subtitle_x=subtitle_x,
         subtitle_y=subtitle_y,
         traces=[
