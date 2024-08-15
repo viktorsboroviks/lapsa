@@ -26,11 +26,11 @@ public:
             assert(_data.size() != 0);
             _energy = 0;
             for (auto &d : _data) {
-                _energy -= d;
+                _energy += d;
             }
         }
         _energy_calculated = true;
-        return _energy;
+        return 1.0 / _energy;
     }
 
     void randomize()
@@ -78,6 +78,7 @@ int main()
             lapsa::run_done_decide<MyState>,
             // proceed
             lapsa::state_propose_new<MyState>,
+            lapsa::log_energy<MyState>,
             lapsa::do_cool_decide_sma<MyState>,
             lapsa::cool_at_rate<MyState>,
             lapsa::state_update<MyState>,

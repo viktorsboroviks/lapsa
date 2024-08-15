@@ -45,7 +45,7 @@ max_array_adaptive_cooling.o: \
 		-I./rododendrs/include \
 		examples/max_array_adaptive_cooling.cpp -o $@
 
-plot_examples: examples
+plot: examples
 	PYTHONPATH=${PYTHONPATH}:python python3 \
 		examples/max_array_adaptive_cooling_plot.py \
 		--config examples/max_array_adaptive_cooling_config.json
