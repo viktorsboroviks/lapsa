@@ -43,6 +43,7 @@ public:
     size_t update_period;
     size_t n_min;
     size_t n_max;
+    std::string text;
 
     Progress(size_t in_n_min, size_t in_n_max, size_t in_update_period = 1) :
         update_period(in_update_period),
@@ -57,12 +58,7 @@ public:
     {
     }
 
-    void update(double n)
-    {
-        update(n, "");
-    }
-
-    void update(size_t n, std::string text)
+    void update(size_t n)
     {
         assert(n >= n_min);
         assert(n <= n_max);
@@ -296,7 +292,6 @@ private:
             if (std::cin.get() == 'q') {
                 _context.q_pressed.store(true);
                 _context.run_progress.os_clear_line();
-                std::cout << "q entered" << std::endl;
                 return;
             }
         }
@@ -365,7 +360,7 @@ public:
 };
 
 template <typename TState>
-void init_log(Context<TState> &c)
+void log_init(Context<TState> &c)
 {
     assert(!c.log_f.is_open());
     if (c.settings.log_filename.empty()) {
@@ -378,7 +373,7 @@ void init_log(Context<TState> &c)
 }
 
 template <typename TState>
-void update_log(Context<TState> &c)
+void log_update(Context<TState> &c)
 {
     // write the log to file
     assert(!c.settings.log_filename.empty());
@@ -394,7 +389,7 @@ void update_log(Context<TState> &c)
 }
 
 template <typename TState>
-void init_run_progress(Context<TState> &c)
+void run_progress_init(Context<TState> &c)
 {
     if (c.temperature > 0) {
         c.run_progress.n_min         = 1;
@@ -404,7 +399,13 @@ void init_run_progress(Context<TState> &c)
 }
 
 template <typename TState>
-void print_run_progress(Context<TState> &c)
+void run_progress_text_reset(Context<TState> &c)
+{
+    c.run_progress.text.clear();
+}
+
+template <typename TState>
+void run_progress_text_add_stats(Context<TState> &c)
 {
     const double state_s = 1 / c.cycle_time_us * 1000000;
 
@@ -413,23 +414,29 @@ void print_run_progress(Context<TState> &c)
     ss << " t " << c.temperature;
     ss << " n/s " << state_s;
 
-    c.run_progress.update(c.state_i, std::string(ss.str()));
+    c.run_progress.text += std::string(ss.str());
 }
 
 template <typename TState>
-void clear_run_progress(Context<TState> &c)
+void run_progress_print(Context<TState> &c)
+{
+    c.run_progress.update(c.state_i);
+}
+
+template <typename TState>
+void run_progress_clear(Context<TState> &c)
 {
     c.run_progress.os_clear_line();
 }
 
 template <typename TState>
-void print_stats(Context<TState> &c)
+void stats_print(Context<TState> &c)
 {
     std::cout << c.get_stats();
 }
 
 template <typename TState>
-void create_stats_file(Context<TState> &c)
+void stats_create_file(Context<TState> &c)
 {
     if (c.settings.stats_filename.empty()) {
         return;
@@ -441,21 +448,21 @@ void create_stats_file(Context<TState> &c)
 }
 
 template <typename TState>
-void randomize_state(Context<TState> &c)
+void state_randomize(Context<TState> &c)
 {
     assert(c.state_i == 1);
     c.state.randomize();
 }
 
 template <typename TState>
-void propose_new_state(Context<TState> &c)
+void state_propose_new(Context<TState> &c)
 {
     c.proposed_state = c.state;
     c.proposed_state.change();
 }
 
 template <typename TState>
-void record_init_temperature(Context<TState> &c)
+void temperature_init_record(Context<TState> &c)
 {
     // calculate intermediate init temperatures
     // - T = -(E_proposed - E) / ln(P)
@@ -477,7 +484,7 @@ void record_init_temperature(Context<TState> &c)
 }
 
 template <typename TState>
-void select_init_temperature_as_max(Context<TState> &c)
+void temperature_init_select_as_max(Context<TState> &c)
 {
     if (c.init_t_log.size() < c.settings.init_t_log_len) {
         return;
@@ -494,7 +501,7 @@ void select_init_temperature_as_max(Context<TState> &c)
 }
 
 template <typename TState>
-void check_init_done(Context<TState> &c)
+void init_done_decide(Context<TState> &c)
 {
     if (c.init_t_log.size() == c.settings.init_t_log_len || c.q_pressed) {
         c.init_done = true;
@@ -502,7 +509,7 @@ void check_init_done(Context<TState> &c)
 }
 
 template <typename TState>
-void update_state(Context<TState> &c)
+void state_update(Context<TState> &c)
 {
     c.state_i++;
     const double dE = c.proposed_state.get_energy() - c.state.get_energy();
@@ -522,7 +529,7 @@ void update_state(Context<TState> &c)
 }
 
 template <typename TState>
-void decide_to_cool(Context<TState> &c)
+void do_cool_always(Context<TState> &c)
 {
     assert(!c.do_cool);
     c.do_cool = true;
@@ -553,7 +560,7 @@ void cool_at_rate(Context<TState> &c)
 }
 
 template <typename TState>
-void record_energy(Context<TState> &c)
+void log_energy(Context<TState> &c)
 {
     const double dE = c.proposed_state.get_energy() - c.state.get_energy();
     if (dE >= 0) {
@@ -569,7 +576,7 @@ void record_energy(Context<TState> &c)
 }
 
 template <typename TState>
-void decide_to_cool_sma(Context<TState> &c)
+void do_cool_decide_sma(Context<TState> &c)
 {
     assert(c.settings.e_sma_fast_len < c.settings.e_sma_slow_len);
     assert(!c.do_cool);
@@ -604,7 +611,7 @@ void decide_to_cool_sma(Context<TState> &c)
 }
 
 template <typename TState>
-void check_run_done(Context<TState> &c)
+void run_done_decide(Context<TState> &c)
 {
     assert(c.temperature <= c.t_max);
     assert(c.temperature >= 0);
@@ -615,7 +622,7 @@ void check_run_done(Context<TState> &c)
 }
 
 template <typename TState>
-void init_report_linear(Context<TState> &c)
+void report_linear_init(Context<TState> &c)
 {
     // report state queue holds the
     // numbers of all states that must produce a report
@@ -636,7 +643,7 @@ void init_report_linear(Context<TState> &c)
 }
 
 template <typename TState>
-void init_report_at_rate(Context<TState> &c)
+void report_at_rate_init(Context<TState> &c)
 {
     // report state queue holds the
     // numbers of all states that must produce a report
@@ -674,7 +681,7 @@ void init_report_at_rate(Context<TState> &c)
 }
 
 template <typename TState>
-void decide_to_report(Context<TState> &c)
+void do_report_decide(Context<TState> &c)
 {
     if (!c.report_states_queue.empty() &&
         c.state_i >= c.report_states_queue.front()) {

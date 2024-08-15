@@ -58,29 +58,34 @@ int main()
     lapsa::Settings s(CONFIG_PATH, "lapsa");
     lapsa::StateMachine<MyState> sm{s};
     sm.init_functions = {
-            lapsa::init_log<MyState>,
-            lapsa::randomize_state<MyState>,
+            lapsa::log_init<MyState>,
+            lapsa::state_randomize<MyState>,
     };
     sm.init_loop_functions = {
-            lapsa::propose_new_state<MyState>,
-            lapsa::record_init_temperature<MyState>,
-            lapsa::select_init_temperature_as_max<MyState>,
-            lapsa::init_run_progress<MyState>,
-            lapsa::check_init_done<MyState>,
+            lapsa::state_propose_new<MyState>,
+            lapsa::temperature_init_record<MyState>,
+            lapsa::temperature_init_select_as_max<MyState>,
+            lapsa::run_progress_init<MyState>,
+            lapsa::init_done_decide<MyState>,
     };
     sm.run_loop_functions = {
-            lapsa::propose_new_state<MyState>,
-            lapsa::decide_to_cool<MyState>,
+            // log and report
+            lapsa::log_update<MyState>,
+            lapsa::run_progress_text_reset<MyState>,
+            lapsa::run_progress_text_add_stats<MyState>,
+            lapsa::run_progress_print<MyState>,
+            // decide to proceed
+            lapsa::run_done_decide<MyState>,
+            // proceed
+            lapsa::state_propose_new<MyState>,
+            lapsa::do_cool_always<MyState>,
             lapsa::cool_at_rate<MyState>,
-            lapsa::update_state<MyState>,
-            lapsa::check_run_done<MyState>,
-            lapsa::update_log<MyState>,
-            lapsa::print_run_progress<MyState>,
+            lapsa::state_update<MyState>,
     };
     sm.finalize_functions = {
-            lapsa::clear_run_progress<MyState>,
-            lapsa::print_stats<MyState>,
-            lapsa::create_stats_file<MyState>,
+            lapsa::run_progress_clear<MyState>,
+            lapsa::stats_print<MyState>,
+            lapsa::stats_create_file<MyState>,
     };
     sm.run();
     return 0;
