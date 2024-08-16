@@ -11,6 +11,10 @@
 
 all: examples
 
+aviize:
+	git clone git@github.com:viktorsboroviks/aviize.git
+	cd iestade; git checkout v1.1
+
 iestade:
 	git clone git@github.com:viktorsboroviks/iestade.git
 	cd iestade; git checkout v2.3
@@ -24,23 +28,27 @@ examples: \
 	max_array_adaptive_cooling.o
 
 max_array_cooling_schedule.o: \
+		aviize \
 		iestade \
 		rododendrs \
 		examples/max_array_cooling_schedule.cpp
 	g++ -Wall -Wextra -Werror -Wpedantic \
 		-std=c++20 -O3 \
 		-I./include \
+		-I./aviize/include \
 		-I./iestade/include \
 		-I./rododendrs/include \
 		examples/max_array_cooling_schedule.cpp -o $@
 
 max_array_adaptive_cooling.o: \
+		aviize \
 		iestade \
 		rododendrs \
 		examples/max_array_adaptive_cooling.cpp
 	g++ -Wall -Wextra -Werror -Wpedantic \
 		-std=c++20 -O3 \
 		-I./include \
+		-I./aviize/include \
 		-I./iestade/include \
 		-I./rododendrs/include \
 		examples/max_array_adaptive_cooling.cpp -o $@
@@ -80,5 +88,6 @@ clean:
 	rm -rf `find . -name "*.txt"`
 
 distclean: clean
+	m -rf aviize
 	m -rf iestade
 	m -rf rododendrs

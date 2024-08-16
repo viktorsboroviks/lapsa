@@ -13,127 +13,13 @@
 #include <thread>
 #include <vector>
 
+#include "aviize.hpp"
 #include "iestade.hpp"
 #include "rododendrs.hpp"
 
 namespace lapsa {
 
 // tools
-std::string seconds_to_hhmmss_string(const double seconds)
-{
-    std::stringstream ss{};
-    ss << std::setw(2) << std::setfill('0') << ((int)seconds / 60 / 60) % 60;
-    ss << ":" << std::setw(2) << std::setfill('0') << ((int)seconds / 60) % 60;
-    ss << ":" << std::setw(2) << std::setfill('0') << (int)seconds % 60;
-    return ss.str();
-}
-
-class Progress {
-private:
-    std::chrono::time_point<std::chrono::steady_clock> last_update_time =
-            std::chrono::steady_clock::now();
-
-public:
-    std::ostream &os       = std::cerr;
-    char c_opening_bracket = '[';
-    char c_closing_bracket = ']';
-    char c_fill            = '.';
-    char c_no_fill         = ' ';
-    size_t c_bar_len       = 10;
-    size_t update_period;
-    size_t n_min;
-    size_t n_max;
-    std::string text;
-
-    Progress(size_t in_n_min, size_t in_n_max, size_t in_update_period = 1) :
-        update_period(in_update_period),
-        n_min(in_n_min),
-        n_max(in_n_max)
-    {
-        assert(update_period > 0);
-    }
-
-    Progress() :
-        Progress(0, 0)
-    {
-    }
-
-    void update(size_t n)
-    {
-        assert(n >= n_min);
-        assert(n <= n_max);
-
-        // if update_period specified:
-        // to not overload the console - update only at update_period
-        if (update_period > 1) {
-            static size_t next_update_in = 0;
-
-            if (next_update_in == 0) {
-                next_update_in = update_period;
-            }
-            else {
-                next_update_in--;
-                return;
-            }
-        }
-
-        // generate a string first and then write the whole string to `os`
-        // to prevent blinking cursor from jumping all over the place
-        std::stringstream ss;
-
-        ss << c_opening_bracket;
-        size_t n_fill = n / (double)(n_max - n_min) * c_bar_len;
-        for (size_t i = 0; i < c_bar_len; i++) {
-            if (i < n_fill) {
-                ss << c_fill;
-            }
-            else {
-                ss << c_no_fill;
-            }
-        }
-
-        const size_t n_max_strlen = std::to_string(n_max).length();
-
-        ss << c_closing_bracket;
-        ss << " " << std::setfill('0') << std::setw(n_max_strlen) << n;
-        ss << "/" << n_max;
-        ss << " " << std::fixed << std::setprecision(1)
-           << (double)n / n_max * 100 << "%";
-        double eta_s = get_eta_s(n, update_period);
-        ss << " ETA " << seconds_to_hhmmss_string(eta_s);
-        ss << text;
-        // overwrite remalining command line with ' '
-        const size_t n_chars = 5;
-        for (size_t i = 0; i < n_chars; i++) {
-            ss << " ";
-        }
-        ss << "\r";
-        os << ss.str();
-    }
-
-    double get_eta_s(size_t n, const size_t update_period)
-    {
-        const std::chrono::time_point<std::chrono::steady_clock> now =
-                std::chrono::steady_clock::now();
-        const double us_per_update_period =
-                std::chrono::duration_cast<std::chrono::microseconds>(
-                        now - last_update_time)
-                        .count();
-        last_update_time         = now;
-        const size_t remaining_n = n_max - n;
-        const double eta_s =
-                us_per_update_period / update_period * remaining_n / 1000000;
-        return eta_s;
-    }
-
-    void os_clear_line()
-    {
-        // move the cursor to the beginning of the current line and clear it
-        os << "\r\033[K";
-        os << std::flush;
-    }
-};
-
 struct Settings {
     size_t n_states            = 1000000;
     double init_p_acceptance   = 0.99;
@@ -243,7 +129,7 @@ public:
     std::chrono::time_point<std::chrono::steady_clock> stop_time;
     double cycle_time_us = 0;
 
-    Progress run_progress;
+    aviize::Progress run_progress;
     std::ofstream log_f;
 
     std::queue<size_t> report_states_queue;
@@ -271,7 +157,7 @@ public:
            << std::endl;
         // runtime stats
         ss << std::left << std::setw(first_col_width) << "runtime"
-           << seconds_to_hhmmss_string(runtime_s) << std::endl;
+           << aviize::seconds_to_hhmmss_string(runtime_s) << std::endl;
         ss << std::left << std::setw(first_col_width) << "state/s" << state_s
            << std::endl;
         ss << std::left << std::setw(first_col_width) << "result energy"
@@ -291,7 +177,6 @@ private:
         while (!_context.stop_threads.load()) {
             if (std::cin.get() == 'q') {
                 _context.q_pressed.store(true);
-                _context.run_progress.os_clear_line();
                 return;
             }
         }
@@ -310,7 +195,7 @@ public:
 
     void run()
     {
-        std::cout << "[enter q to interrupt]" << std::endl;
+        aviize::out_stream << "[enter q to interrupt]" << std::endl;
         std::thread input_thread =
                 std::thread(&StateMachine::_input_handler, this);
 
@@ -352,7 +237,7 @@ public:
             f(_context);
         }
         if (!_context.q_pressed.load()) {
-            std::cout << "[press enter to quit]" << std::flush;
+            aviize::out_stream << "[press enter to quit]" << std::flush;
         }
         _context.stop_threads.store(true);
         input_thread.join();
@@ -410,23 +295,81 @@ void run_progress_text_add_stats(Context<TState> &c)
     const double state_s = 1 / c.cycle_time_us * 1000000;
 
     std::stringstream ss;
-    ss << " e " << c.state.get_energy();
-    ss << " t " << c.temperature;
     ss << " n/s " << state_s;
 
     c.run_progress.text += std::string(ss.str());
 }
 
 template <typename TState>
+void run_progress_text_add_total(Context<TState> &c)
+{
+    if (!c.run_progress.text.empty()) {
+        c.run_progress.text += " ";
+    }
+    c.run_progress.text += c.run_progress.str_total(c.state_i);
+}
+
+template <typename TState>
+void run_progress_text_add_pct(Context<TState> &c)
+{
+    if (!c.run_progress.text.empty()) {
+        c.run_progress.text += " ";
+    }
+    c.run_progress.text += c.run_progress.str_pct(c.state_i);
+}
+
+template <typename TState>
+void run_progress_text_add_eta(Context<TState> &c)
+{
+    if (!c.run_progress.text.empty()) {
+        c.run_progress.text += " ";
+    }
+    c.run_progress.text += c.run_progress.str_eta(c.state_i);
+}
+
+template <typename TState>
+void run_progress_text_add_e(Context<TState> &c)
+{
+    if (!c.run_progress.text.empty()) {
+        c.run_progress.text += " ";
+    }
+    std::ostringstream oss;
+    oss << std::scientific << std::setprecision(3) << c.state.get_energy();
+    c.run_progress.text += "e " + oss.str();
+}
+
+template <typename TState>
+void run_progress_text_add_t(Context<TState> &c)
+{
+    if (!c.run_progress.text.empty()) {
+        c.run_progress.text += " ";
+    }
+    std::ostringstream oss;
+    oss << std::scientific << std::setprecision(3) << c.temperature;
+    c.run_progress.text += "t " + oss.str();
+}
+
+template <typename TState>
+void run_progress_text_add_freq(Context<TState> &c)
+{
+    if (!c.run_progress.text.empty()) {
+        c.run_progress.text += " ";
+    }
+    const double state_s = 1 / c.cycle_time_us * 1000000;
+    c.run_progress.text += "freq " + std::to_string(state_s);
+}
+
+template <typename TState>
 void run_progress_print(Context<TState> &c)
 {
-    c.run_progress.update(c.state_i);
+    c.run_progress.print();
 }
 
 template <typename TState>
 void run_progress_clear(Context<TState> &c)
 {
-    c.run_progress.os_clear_line();
+    (void)c;
+    aviize::erase_line();
 }
 
 template <typename TState>
@@ -503,7 +446,8 @@ void temperature_init_select_as_max(Context<TState> &c)
 template <typename TState>
 void init_done_decide(Context<TState> &c)
 {
-    if (c.init_t_log.size() == c.settings.init_t_log_len || c.q_pressed) {
+    if (c.init_t_log.size() == c.settings.init_t_log_len ||
+        c.q_pressed.load()) {
         c.init_done = true;
     }
 }
@@ -616,7 +560,7 @@ void run_done_decide(Context<TState> &c)
     assert(c.temperature <= c.t_max);
     assert(c.temperature >= 0);
     assert(!c.run_done);
-    if (c.state_i == c.settings.n_states || c.q_pressed) {
+    if (c.state_i == c.settings.n_states || c.q_pressed.load()) {
         c.run_done = true;
     }
 }

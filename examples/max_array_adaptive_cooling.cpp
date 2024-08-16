@@ -72,7 +72,11 @@ int main()
             // log and report
             lapsa::log_update<MyState>,
             lapsa::run_progress_text_reset<MyState>,
-            lapsa::run_progress_text_add_stats<MyState>,
+            lapsa::run_progress_text_add_total<MyState>,
+            lapsa::run_progress_text_add_pct<MyState>,
+            lapsa::run_progress_text_add_eta<MyState>,
+            lapsa::run_progress_text_add_t<MyState>,
+            lapsa::run_progress_text_add_e<MyState>,
             lapsa::run_progress_print<MyState>,
             // decide to proceed
             lapsa::run_done_decide<MyState>,
