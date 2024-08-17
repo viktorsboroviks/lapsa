@@ -1,3 +1,7 @@
+"""
+Plot max array - adaptive cooling.
+"""
+
 import argparse
 import json
 import vplot
@@ -17,7 +21,7 @@ parser.add_argument(
 )
 args = parser.parse_args()
 
-with open(args.config) as f:
+with open(args.config, encoding="UTF-8") as f:
     config_json = json.load(f)
 if args.config_section:
     config_json = config_json[args.config_section]

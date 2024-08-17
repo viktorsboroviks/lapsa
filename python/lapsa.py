@@ -1,3 +1,8 @@
+"""
+Lapsa plots.
+"""
+# pylint: disable=missing-function-docstring
+# pylint: disable=too-many-arguments
 import pandas as pd
 import vplot
 
@@ -22,8 +27,10 @@ def _read_table(
         else:
             x_step = 1
         return table.iloc[::x_step]
-    except FileNotFoundError:
-        raise FileNotFoundError(f"plot_account_data skipped: {data_csv} not found")
+    except FileNotFoundError as e:
+        raise FileNotFoundError(
+            f"plot_account_data skipped: {data_csv} not found"
+        ) from e
 
 
 def energy_temperature_subplot(

@@ -3,11 +3,12 @@
 	examples \
 	plot \
 	format \
-	clang-format \
-	jq-format \
-	black-format \
+	format-cpp \
+	format-json \
+	format-python \
 	lint \
-	cppcheck-lint \
+	lint-cpp \
+	lint-python \
 	clean \
 	distclean
 
@@ -15,15 +16,15 @@ all: examples
 
 aviize:
 	git clone git@github.com:viktorsboroviks/aviize.git
-	cd iestade; git checkout v1.3
+	cd iestade; git checkout v1.5
 
 iestade:
 	git clone git@github.com:viktorsboroviks/iestade.git
-	cd iestade; git checkout v2.3
+	cd iestade; git checkout v2.5
 
 rododendrs:
 	git clone git@github.com:viktorsboroviks/rododendrs.git
-	cd rododendrs; git checkout v1.1
+	cd rododendrs; git checkout v1.4
 
 examples: \
 	max_array_cooling_schedule.o \
@@ -60,15 +61,15 @@ plot: examples
 		examples/max_array_adaptive_cooling_plot.py \
 		--config examples/max_array_adaptive_cooling_config.json
 
-format: clang-format jq-format black-format
+format: format-cpp format-json format-python
 
-clang-format: \
+format-cpp: \
 		include/lapsa.hpp \
 		examples/max_array_cooling_schedule.cpp \
 		examples/max_array_adaptive_cooling.cpp
 	clang-format -i $^
 
-jq-format: \
+format-json: \
 		config.json \
 		examples/max_array_cooling_schedule_config.json \
 		examples/max_array_adaptive_cooling_config.json
@@ -79,14 +80,14 @@ jq-format: \
 	jq . examples/max_array_adaptive_cooling_config.json | \
 		sponge examples/max_array_adaptive_cooling_config.json
 
-black-format: \
+format-python: \
 		python/lapsa.py \
 		examples/max_array_adaptive_cooling_plot.py
 	black $^
 
-lint: cppcheck-lint
+lint: lint-cpp lint-python
 
-cppcheck-lint: \
+lint-cpp: \
 		include/lapsa.hpp \
 		examples/max_array_cooling_schedule.cpp \
 		examples/max_array_adaptive_cooling.cpp
@@ -109,6 +110,11 @@ cppcheck-lint: \
 		-I./iestade/include \
 		-I./rododendrs/include \
 		$^
+
+lint-python: python/lapsa.py \
+		examples/max_array_adaptive_cooling_plot.py
+	pylint $^
+	flake8 $^
 
 clean:
 	rm -rf `find . -name "*.o"`
