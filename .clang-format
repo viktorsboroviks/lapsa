@@ -22,6 +22,8 @@ IncludeBlocks: Regroup
 Language: Cpp
 PackConstructorInitializers: Never
 PointerAlignment: Left
+QualifierAlignment: Left
+ReferenceAlignment: Pointer
 ReflowComments: true
 SpaceBeforeParens: ControlStatements
 SpacesInParentheses: false

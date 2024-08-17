@@ -13,37 +13,34 @@ private:
     std::vector<double> _data;
 
 public:
-    MyState(lapsa::Settings &in_settings) :
+    explicit MyState(lapsa::Settings& in_settings) :
         State(in_settings),
         _data(iestade::size_t_from_json(CONFIG_PATH, "state/data_size"))
     {
     }
 
-    double get_energy()
+    double get_energy() override
     {
         // if energy not calculated, do it now and store the result
         if (!_energy_calculated) {
             assert(_data.size() != 0);
-            _energy = 0;
-            for (auto &d : _data) {
-                _energy += d;
-            }
+            _energy = std::accumulate(_data.begin(), _data.end(), 0.0);
         }
         _energy_calculated = true;
         return 1.0 / _energy;
     }
 
-    void randomize()
+    void randomize() override
     {
         assert(_data.size() != 0);
-        for (auto &d : _data) {
-            d = rododendrs::rnd01();
-        }
+        std::generate(_data.begin(), _data.end(), []() {
+            return rododendrs::rnd01();
+        });
 
         reset_energy();
     }
 
-    void change()
+    void change() override
     {
         assert(_data.size() != 0);
         size_t changed_i = rododendrs::rnd01() * _data.size();

@@ -70,7 +70,7 @@ protected:
     }
 
 public:
-    State(Settings &in_settings) :
+    explicit State(Settings &in_settings) :
         _settings(in_settings)
     {
         reset_energy();
@@ -135,7 +135,7 @@ public:
     std::queue<size_t> report_states_queue;
     bool do_report = false;
 
-    Context(Settings &s) :
+    explicit Context(Settings &s) :
         settings(s),
         state(settings),
         proposed_state(settings),
@@ -188,7 +188,7 @@ public:
     std::vector<state_function_t> run_loop_functions{};
     std::vector<state_function_t> finalize_functions{};
 
-    StateMachine(Settings &s) :
+    explicit StateMachine(Settings &s) :
         _context(s)
     {
     }
@@ -200,12 +200,12 @@ public:
                 std::thread(&StateMachine::_input_handler, this);
 
         _context.start_time = std::chrono::steady_clock::now();
-        for (state_function_t &f : init_functions) {
+        for (const state_function_t &f : init_functions) {
             f(_context);
         }
         auto cycle_begin_time = std::chrono::steady_clock::now();
         while (init_loop_functions.size() > 0 && !_context.init_done) {
-            for (state_function_t &f : init_loop_functions) {
+            for (const state_function_t &f : init_loop_functions) {
                 if (_context.init_done) {
                     break;
                 }
@@ -219,7 +219,7 @@ public:
             cycle_begin_time = cycle_end_time;
         }
         while (run_loop_functions.size() > 0 && !_context.run_done) {
-            for (state_function_t &f : run_loop_functions) {
+            for (const state_function_t &f : run_loop_functions) {
                 if (_context.run_done) {
                     break;
                 }
@@ -233,7 +233,7 @@ public:
             cycle_begin_time = cycle_end_time;
         }
         _context.stop_time = std::chrono::steady_clock::now();
-        for (state_function_t &f : finalize_functions) {
+        for (const state_function_t &f : finalize_functions) {
             f(_context);
         }
         if (!_context.q_pressed.load()) {
@@ -253,7 +253,6 @@ void log_init(Context<TState> &c)
     }
 
     c.log_f.open(c.settings.log_filename);
-    c.log_f.is_open();
     c.log_f << "state_i,temperature,energy" << std::endl;
 }
 
@@ -386,7 +385,6 @@ void stats_create_file(Context<TState> &c)
     }
 
     std::ofstream f(c.settings.stats_filename);
-    f.is_open();
     f << c.get_stats();
 }
 
