@@ -8,10 +8,20 @@
 const std::string CONFIG_PATH =
         "examples/max_array_cooling_schedule_config.json";
 
-// cppcheck-suppress ctuOneDefinitionRuleViolation
 class MyState : lapsa::State {
 private:
     std::vector<double> _data;
+
+    void _evaluate()
+    {
+        // if energy not calculated, do it now and store the result
+        if (!_evaluated) {
+            assert(_data.size() != 0);
+            _value  = std::accumulate(_data.begin(), _data.end(), 0.0);
+            _energy = 1.0 / _value;
+        }
+        _evaluated = true;
+    }
 
 public:
     explicit MyState(lapsa::Settings &in_settings) :
@@ -22,13 +32,14 @@ public:
 
     double get_energy() override
     {
-        // if energy not calculated, do it now and store the result
-        if (!_energy_calculated) {
-            assert(_data.size() != 0);
-            _energy = -std::accumulate(_data.begin(), _data.end(), 0.0);
-        }
-        _energy_calculated = true;
+        _evaluate();
         return _energy;
+    }
+
+    double get_value() override
+    {
+        _evaluate();
+        return _value;
     }
 
     void randomize() override
@@ -38,7 +49,7 @@ public:
             return rododendrs::rnd01();
         });
 
-        reset_energy();
+        reset_evaluation();
     }
 
     void change() override
@@ -47,7 +58,7 @@ public:
         size_t changed_i = rododendrs::rnd01() * _data.size();
         _data[changed_i] = rododendrs::rnd01();
 
-        reset_energy();
+        reset_evaluation();
     }
 };
 
@@ -75,6 +86,7 @@ int main()
             lapsa::run_progress_text_add_eta<MyState>,
             lapsa::run_progress_text_add_t<MyState>,
             lapsa::run_progress_text_add_e<MyState>,
+            lapsa::run_progress_text_add_v<MyState>,
             lapsa::run_progress_print<MyState>,
             // decide to proceed
             lapsa::run_done_decide<MyState>,

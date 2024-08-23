@@ -1,0 +1,11 @@
+{
+  "plot_log": {
+    "csv_path": "log.csv",
+    "output_path": "output.html",
+    "height": 700,
+    "width": 1200,
+    "scale": 3,
+    "calc_e_mean_n": 1000,
+    "calc_e_sd_n": 1000
+  }
+}

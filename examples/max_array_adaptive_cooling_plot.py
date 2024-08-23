@@ -26,10 +26,11 @@ with open(args.config, encoding="UTF-8") as f:
 if args.config_section:
     config_json = config_json[args.config_section]
 
+data_pd = lapsa.log_to_pd(config_json["data_csv"])
 subplots = []
 subplots += [
-    lapsa.temperature_subplot(
-        data_csv=config_json["data_csv"],
+    lapsa.subplot_t(
+        data_pd=data_pd,
         col=1,
         row=1,
         log_y=True,
@@ -39,8 +40,8 @@ subplots += [
 ]
 
 subplots += [
-    lapsa.energy_subplot(
-        data_csv=config_json["data_csv"],
+    lapsa.subplot_e(
+        data_pd=data_pd,
         col=1,
         row=2,
         log_y=True,

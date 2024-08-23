@@ -60,6 +60,9 @@ plot: examples
 	PYTHONPATH=${PYTHONPATH}:python python3 \
 		examples/max_array_adaptive_cooling_plot.py \
 		--config examples/max_array_adaptive_cooling_config.json
+	PYTHONPATH=${PYTHONPATH}:python python3 \
+		scripts/plot_log.py \
+		--config examples/max_array_adaptive_cooling_config.json
 
 format: format-cpp format-json format-python
 
@@ -71,17 +74,16 @@ format-cpp: \
 
 format-json: \
 		config.json \
+		scripts/plot_log_config.json \
 		examples/max_array_cooling_schedule_config.json \
 		examples/max_array_adaptive_cooling_config.json
-	jq . config.json | \
-		sponge config.json
-	jq . examples/max_array_cooling_schedule_config.json | \
-		sponge examples/max_array_cooling_schedule_config.json
-	jq . examples/max_array_adaptive_cooling_config.json | \
-		sponge examples/max_array_adaptive_cooling_config.json
+	for json_file in $^; do \
+		jq . $$json_file | sponge $$json_file; \
+    done
 
 format-python: \
 		python/lapsa.py \
+		scripts/plot_log.py \
 		examples/max_array_adaptive_cooling_plot.py
 	black $^
 
@@ -111,7 +113,9 @@ lint-cpp: \
 		-I./rododendrs/include \
 		$^
 
-lint-python: python/lapsa.py \
+lint-python: \
+		python/lapsa.py \
+		scripts/plot_log.py \
 		examples/max_array_adaptive_cooling_plot.py
 	pylint $^
 	flake8 $^
@@ -120,6 +124,8 @@ clean:
 	rm -rf `find . -name "*.o"`
 	rm -rf `find . -name "*.csv"`
 	rm -rf `find . -name "*.txt"`
+	rm -rf `find . -name "*.svg"`
+	rm -rf `find . -name "*.html"`
 
 distclean: clean
 	m -rf aviize

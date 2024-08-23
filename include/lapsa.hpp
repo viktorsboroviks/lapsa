@@ -60,20 +60,22 @@ struct Settings {
 class State {
 protected:
     Settings _settings;
-    bool _energy_calculated;
+    bool _evaluated;
     double _energy;
+    double _value;
 
-    void reset_energy()
+    void reset_evaluation()
     {
-        _energy_calculated = false;
-        _energy            = -1;
+        _evaluated = false;
+        _energy    = -1;
+        _value     = -1;
     }
 
 public:
     explicit State(Settings &in_settings) :
         _settings(in_settings)
     {
-        reset_energy();
+        reset_evaluation();
     }
 
     // virtual destructor is required if virtual methods are used
@@ -85,15 +87,21 @@ public:
         return -1.0;
     }
 
+    virtual double get_value()
+    {
+        std::cout << "error: get_value method not implemented" << std::endl;
+        return -1.0;
+    }
+
     virtual void randomize()
     {
-        reset_energy();
+        reset_evaluation();
         std::cout << "error: randomize method not implemented" << std::endl;
     }
 
     virtual void change()
     {
-        reset_energy();
+        reset_evaluation();
 
         // this method is very individual-specific, so to not overthink it
         // I leave it virtual
@@ -162,6 +170,8 @@ public:
            << std::endl;
         ss << std::left << std::setw(first_col_width) << "result energy"
            << state.get_energy() << std::endl;
+        ss << std::left << std::setw(first_col_width) << "result value"
+           << state.get_value() << std::endl;
         return ss.str();
     }
 };
@@ -253,7 +263,7 @@ void log_init(Context<TState> &c)
     }
 
     c.log_f.open(c.settings.log_filename);
-    c.log_f << "state_i,temperature,energy" << std::endl;
+    c.log_f << "state_i,temperature,energy,value" << std::endl;
 }
 
 template <typename TState>
@@ -268,6 +278,7 @@ void log_update(Context<TState> &c)
     c.log_f << c.state_i;
     c.log_f << "," << c.temperature;
     c.log_f << "," << c.state.get_energy();
+    c.log_f << "," << c.state.get_value();
     c.log_f << std::endl;
     c.log_f << std::flush;
 }
@@ -346,6 +357,17 @@ void run_progress_text_add_t(Context<TState> &c)
     std::ostringstream oss;
     oss << std::scientific << std::setprecision(3) << c.temperature;
     c.run_progress.text += "t " + oss.str();
+}
+
+template <typename TState>
+void run_progress_text_add_v(Context<TState> &c)
+{
+    if (!c.run_progress.text.empty()) {
+        c.run_progress.text += " ";
+    }
+    std::ostringstream oss;
+    oss << std::scientific << std::setprecision(3) << c.state.get_value();
+    c.run_progress.text += "v " + oss.str();
 }
 
 template <typename TState>
@@ -481,7 +503,7 @@ template <typename TState>
 void cool_at_rate(Context<TState> &c)
 {
     assert(c.settings.cooling_rate > 0);
-    assert(c.settings.cooling_rate < 1);
+    assert(c.settings.cooling_rate <= 1);
     assert(c.temperature <= c.t_max);
     assert(c.temperature >= 0);
     if (c.do_cool) {

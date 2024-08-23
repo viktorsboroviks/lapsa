@@ -1,12 +1,12 @@
 {
   "lapsa": {
-    "n_states": 1000000,
+    "n_states": 300000,
     "init_p_acceptance": 0.97,
     "init_t_log_len": 100,
-    "cooling_rate": 0.9999,
+    "cooling_rate": 0.9,
     "cooling_round_len": 1,
     "e_sma_fast_len": 50,
-    "e_sma_slow_len": 100,
+    "e_sma_slow_len": 200,
     "e_sma_update_period": 1,
     "progress_update_period": 100,
     "log_filename": "log.csv",
@@ -18,5 +18,14 @@
   "plot": {
     "data_csv": "log.csv",
     "output_file": "output.svg"
+  },
+  "plot_log": {
+    "csv_path": "log.csv",
+    "output_path": "output.html",
+    "height": 700,
+    "width": 1200,
+    "scale": 3,
+    "calc_e_mean_n": 1000,
+    "calc_e_sd_n": 1000
   }
 }
