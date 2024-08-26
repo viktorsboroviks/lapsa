@@ -92,7 +92,7 @@ int main()
             lapsa::run_done_decide<MyState>,
             // proceed
             lapsa::state_propose_new<MyState>,
-            lapsa::do_cool_always<MyState>,
+            lapsa::do_cool_set<MyState>,
             lapsa::cool_at_rate<MyState>,
             lapsa::state_update<MyState>,
     };

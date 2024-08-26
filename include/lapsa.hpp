@@ -21,14 +21,17 @@ namespace lapsa {
 
 // tools
 struct Settings {
-    size_t n_states            = 1000000;
-    double init_p_acceptance   = 0.99;
-    size_t init_t_log_len      = 100;
-    double cooling_rate        = 0.95;
-    size_t cooling_round_len   = 1;
-    size_t e_sma_fast_len      = 50;
-    size_t e_sma_slow_len      = 200;
-    size_t e_sma_update_period = 100;
+    size_t n_states          = 1000000;
+    double init_p_acceptance = 0.99;
+    size_t init_t_log_len    = 100;
+    double cooling_rate      = 0.95;
+    size_t cooling_round_len = 1;
+    size_t e_decision_period = 100;
+    size_t e_sma_fast_len    = 50;
+    size_t e_sma_slow_len    = 200;
+    size_t e_window          = 100;
+    size_t e_shift           = 100;
+    double e_min_az_overlap  = 0.99;
 
     size_t progress_update_period = 1;
     std::string log_filename      = "log.csv";
@@ -46,9 +49,12 @@ struct Settings {
         init_t_log_len      (iestade::size_t_from_json(config_filepath, key_path_prefix + "/init_t_log_len")),
         cooling_rate        (iestade::double_from_json(config_filepath, key_path_prefix + "/cooling_rate")),
         cooling_round_len   (iestade::size_t_from_json(config_filepath, key_path_prefix + "/cooling_round_len")),
+        e_decision_period   (iestade::size_t_from_json(config_filepath, key_path_prefix + "/e_decision_period")),
         e_sma_fast_len      (iestade::size_t_from_json(config_filepath, key_path_prefix + "/e_sma_fast_len")),
         e_sma_slow_len      (iestade::size_t_from_json(config_filepath, key_path_prefix + "/e_sma_slow_len")),
-        e_sma_update_period (iestade::size_t_from_json(config_filepath, key_path_prefix + "/e_sma_update_period")),
+        e_window            (iestade::size_t_from_json(config_filepath, key_path_prefix + "/e_window")),
+        e_shift             (iestade::size_t_from_json(config_filepath, key_path_prefix + "/e_shift")),
+        e_min_az_overlap    (iestade::double_from_json(config_filepath, key_path_prefix + "/e_min_az_overlap")),
         log_filename        (iestade::string_from_json(config_filepath, key_path_prefix + "/log_filename")),
         stats_filename      (iestade::string_from_json(config_filepath, key_path_prefix + "/stats_filename")),
         n_reports           (iestade::size_t_from_json(config_filepath, key_path_prefix + "/n_reports", true, 0))
@@ -147,7 +153,8 @@ public:
         settings(s),
         state(settings),
         proposed_state(settings),
-        e_log_len(settings.e_sma_slow_len)
+        e_log_len(std::max(settings.e_sma_slow_len,
+                           settings.e_shift + settings.e_window))
     {
     }
 
@@ -485,7 +492,6 @@ void state_update(Context<TState> &c)
 
     // dE >= 0
     const double p_acceptance = std::exp(-dE / c.temperature);
-    assert(p_acceptance <= 1);
     if (rododendrs::rnd01() <= p_acceptance) {
         c.state = c.proposed_state;
         return;
@@ -493,7 +499,7 @@ void state_update(Context<TState> &c)
 }
 
 template <typename TState>
-void do_cool_always(Context<TState> &c)
+void do_cool_set(Context<TState> &c)
 {
     assert(!c.do_cool);
     c.do_cool = true;
@@ -548,8 +554,8 @@ void do_cool_decide_sma(Context<TState> &c)
         return;
     }
 
-    assert(c.settings.e_sma_update_period > 0);
-    if (c.state_i % c.settings.e_sma_update_period) {
+    assert(c.settings.e_decision_period > 0);
+    if (c.state_i % c.settings.e_decision_period) {
         return;
     }
 
@@ -570,6 +576,96 @@ void do_cool_decide_sma(Context<TState> &c)
     const double e_sma_slow = sum_e_sma_slow / c.settings.e_sma_slow_len;
 
     if (e_sma_fast > e_sma_slow) {
+        c.do_cool = true;
+    }
+}
+
+template <typename TState>
+void do_cool_decide_min_sd(Context<TState> &c)
+{
+    assert(c.settings.e_window > 0);
+    assert(c.settings.e_shift > 0);
+    const size_t req_e_log_len = c.settings.e_shift + c.settings.e_window;
+    assert(c.e_log_len == req_e_log_len);
+
+    assert(!c.do_cool);
+    if (c.e_log.size() < req_e_log_len) {
+        return;
+    }
+
+    assert(c.settings.e_decision_period > 0);
+    if (c.state_i % c.settings.e_decision_period) {
+        return;
+    }
+
+    assert(c.temperature <= c.t_max);
+    assert(c.temperature >= 0);
+
+    // calculate energy at two intervals in the past
+    const auto front_begin = c.e_log.begin();
+    const auto front_end   = c.e_log.begin() + c.settings.e_window;
+    const std::vector<double> front_window(front_begin, front_end);
+    assert(front_window.size() == c.settings.e_window);
+    const double front_sd = rododendrs::sd<std::vector>(front_window);
+
+    const auto back_begin = c.e_log.begin() + c.settings.e_shift;
+    const auto back_end =
+            c.e_log.begin() + c.settings.e_window + c.settings.e_shift;
+    const std::vector<double> back_window(back_begin, back_end);
+    assert(back_window.size() == c.settings.e_window);
+    const double back_mean = rododendrs::mean<std::vector>(back_window);
+    const double back_sd   = rododendrs::sd<std::vector>(back_window);
+
+    if (std::abs(back_mean - c.e_log[0]) < std::min(front_sd, back_sd)) {
+        c.do_cool = true;
+    }
+}
+
+template <typename TState>
+void do_cool_decide_az(Context<TState> &c)
+{
+    assert(c.settings.e_window > 0);
+    assert(c.settings.e_shift > 0);
+    const size_t req_e_log_len = c.settings.e_shift + c.settings.e_window;
+    assert(c.e_log_len == req_e_log_len);
+
+    assert(!c.do_cool);
+    if (c.e_log.size() < req_e_log_len) {
+        return;
+    }
+
+    assert(c.settings.e_decision_period > 0);
+    if (c.state_i % c.settings.e_decision_period) {
+        return;
+    }
+
+    assert(c.temperature <= c.t_max);
+    assert(c.temperature >= 0);
+
+    // calculate energy at two intervals in the past
+    const auto front_begin = c.e_log.begin();
+    const auto front_end   = c.e_log.begin() + c.settings.e_window;
+    const std::vector<double> front_window(front_begin, front_end);
+    assert(front_window.size() == c.settings.e_window);
+    const double front_mean = rododendrs::mean<std::vector>(front_window);
+    const double front_sd   = rododendrs::sd<std::vector>(front_window);
+
+    const auto back_begin = c.e_log.begin() + c.settings.e_shift;
+    const auto back_end =
+            c.e_log.begin() + c.settings.e_window + c.settings.e_shift;
+    const std::vector<double> back_window(back_begin, back_end);
+    assert(back_window.size() == c.settings.e_window);
+    const double back_mean = rododendrs::mean<std::vector>(back_window);
+    const double back_sd   = rododendrs::sd<std::vector>(back_window);
+
+    const double az_overlap =
+            rododendrs::az_pdf_overlap<double>(front_mean,
+                                               front_sd,
+                                               c.settings.e_window,
+                                               back_mean,
+                                               back_sd,
+                                               c.settings.e_window);
+    if (az_overlap >= c.settings.e_min_az_overlap) {
         c.do_cool = true;
     }
 }

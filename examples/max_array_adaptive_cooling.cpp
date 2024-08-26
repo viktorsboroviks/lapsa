@@ -78,8 +78,9 @@ int main()
             lapsa::init_done_decide<MyState>,
     };
     sm.run_loop_functions = {
-            // log and report
+            // log
             lapsa::log_update<MyState>,
+            // report
             lapsa::run_progress_text_reset<MyState>,
             lapsa::run_progress_text_add_total<MyState>,
             lapsa::run_progress_text_add_pct<MyState>,
@@ -94,6 +95,8 @@ int main()
             lapsa::state_propose_new<MyState>,
             lapsa::log_energy<MyState>,
             lapsa::do_cool_decide_sma<MyState>,
+            //            lapsa::do_cool_decide_min_sd<MyState>,
+            //            lapsa::do_cool_decide_az<MyState>,
             lapsa::cool_at_rate<MyState>,
             lapsa::state_update<MyState>,
     };

@@ -5,9 +5,12 @@
     "init_t_log_len": 100,
     "cooling_rate": 0.9,
     "cooling_round_len": 1,
+    "e_decision_period": 5,
     "e_sma_fast_len": 50,
     "e_sma_slow_len": 200,
-    "e_sma_update_period": 1,
+    "e_window": 100,
+    "e_shift": 100,
+    "e_min_az_overlap": 0.9,
     "progress_update_period": 100,
     "log_filename": "log.csv",
     "stats_filename": "stats.txt"
@@ -25,7 +28,7 @@
     "height": 700,
     "width": 1200,
     "scale": 3,
-    "calc_e_mean_n": 1000,
-    "calc_e_sd_n": 1000
+    "calc_e_mean_n": 0,
+    "calc_e_sd_n": 0
   }
 }

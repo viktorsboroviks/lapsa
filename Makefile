@@ -24,7 +24,7 @@ iestade:
 
 rododendrs:
 	git clone git@github.com:viktorsboroviks/rododendrs.git
-	cd rododendrs; git checkout v1.4
+	cd rododendrs; git checkout v1.6
 
 examples: \
 	max_array_cooling_schedule.o \
@@ -63,6 +63,18 @@ plot: examples
 	PYTHONPATH=${PYTHONPATH}:python python3 \
 		scripts/plot_log.py \
 		--config examples/max_array_adaptive_cooling_config.json
+
+saves:
+	mkdir saves
+
+saves_dir := saves/${shell date -Iseconds}
+save: saves
+	mkdir -p "${saves_dir}"
+	cp stats.txt "${saves_dir}"
+	cp output.html "${saves_dir}"
+	cp examples/max_array_adaptive_cooling_config.json "${saves_dir}"
+	cp examples/max_array_adaptive_cooling.cpp "${saves_dir}"
+	cp include/lapsa.hpp "${saves_dir}"
 
 format: format-cpp format-json format-python
 

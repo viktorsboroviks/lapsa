@@ -6,6 +6,11 @@
     "width": 1200,
     "scale": 3,
     "calc_e_mean_n": 1000,
-    "calc_e_sd_n": 1000
+    "calc_e_sd_n": 1000,
+    "plot_t": true,
+    "plot_do_cool": true,
+    "plot_e": true,
+    "plot_de": true,
+    "plot_v": true
   }
 }
