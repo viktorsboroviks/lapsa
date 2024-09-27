@@ -34,7 +34,7 @@ subplots += [
         col=1,
         row=1,
         plot_log_y=True,
-        data_col_i="state_i",
+        data_col_i="run_i",
         subtitle_text=None,
     )
 ]
@@ -45,7 +45,7 @@ subplots += [
         col=1,
         row=2,
         plot_log_y=True,
-        data_col_i="state_i",
+        data_col_i="run_i",
         subtitle_text=None,
     )
 ]

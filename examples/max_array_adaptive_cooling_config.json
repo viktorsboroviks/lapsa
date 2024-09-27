@@ -1,6 +1,6 @@
 {
   "lapsa": {
-    "n_states": 300000,
+    "n_states": 1000000,
     "init_p_acceptance": 0.97,
     "init_t_log_len": 100,
     "cooling_rate": 0.9,
@@ -12,8 +12,8 @@
     "e_shift": 100,
     "e_min_az_overlap": 0.9,
     "progress_update_period": 100,
-    "log_filename": "log.csv",
-    "stats_filename": "stats.txt"
+    "log_file_name": "log.csv",
+    "stats_file_name": "stats.txt"
   },
   "state": {
     "data_size": 100
@@ -22,13 +22,7 @@
     "data_csv": "log.csv",
     "output_file": "output.svg"
   },
-  "plot_log": {
-    "csv_path": "log.csv",
-    "output_path": "output.html",
-    "height": 700,
-    "width": 1200,
-    "scale": 3,
-    "calc_e_mean_n": 0,
-    "calc_e_sd_n": 0
+  "plot_lapsa": {
+    "output_file_name": "output.html"
   }
 }

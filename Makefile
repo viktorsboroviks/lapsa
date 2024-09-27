@@ -16,15 +16,19 @@ all: examples
 
 aviize:
 	git clone git@github.com:viktorsboroviks/aviize.git
-	cd iestade; git checkout v1.5
+	cd iestaade; git checkout v1.5
 
-iestade:
-	git clone git@github.com:viktorsboroviks/iestade.git
-	cd iestade; git checkout v2.5
+iestaade:
+	git clone git@github.com:viktorsboroviks/iestaade.git
+	cd iestaade; git checkout v2.5
 
 rododendrs:
 	git clone git@github.com:viktorsboroviks/rododendrs.git
 	cd rododendrs; git checkout v1.6
+
+vasarniica:
+	git clone git@github.com:viktorsboroviks/vasarniica.git
+	cd vasarniica; git checkout v1.2
 
 examples: \
 	max_array_cooling_schedule.o \
@@ -32,36 +36,36 @@ examples: \
 
 max_array_cooling_schedule.o: \
 		aviize \
-		iestade \
+		iestaade \
 		rododendrs \
 		examples/max_array_cooling_schedule.cpp
 	g++ -Wall -Wextra -Werror -Wpedantic \
 		-std=c++20 -O3 \
 		-I./include \
 		-I./aviize/include \
-		-I./iestade/include \
+		-I./iestaade/include \
 		-I./rododendrs/include \
 		examples/max_array_cooling_schedule.cpp -o $@
 
 max_array_adaptive_cooling.o: \
 		aviize \
-		iestade \
+		iestaade \
 		rododendrs \
 		examples/max_array_adaptive_cooling.cpp
 	g++ -Wall -Wextra -Werror -Wpedantic \
 		-std=c++20 -O3 \
 		-I./include \
 		-I./aviize/include \
-		-I./iestade/include \
+		-I./iestaade/include \
 		-I./rododendrs/include \
 		examples/max_array_adaptive_cooling.cpp -o $@
 
-plot: examples
-	PYTHONPATH=${PYTHONPATH}:python python3 \
+plot: examples vasarniica
+	PYTHONPATH=$(PYTHONPATH):vasarniica/python:python python3 \
 		examples/max_array_adaptive_cooling_plot.py \
 		--config examples/max_array_adaptive_cooling_config.json
-	PYTHONPATH=${PYTHONPATH}:python python3 \
-		scripts/plot_log.py \
+	PYTHONPATH=$(PYTHONPATH):vasarniica/python:python python3 \
+		scripts/plot_lapsa.py \
 		--config examples/max_array_adaptive_cooling_config.json
 
 saves:
@@ -121,7 +125,7 @@ lint-cpp: \
 		--checkers-report=cppcheck_report.txt \
 		-I./include \
 		-I./aviize/include \
-		-I./iestade/include \
+		-I./iestaade/include \
 		-I./rododendrs/include \
 		$^
 
@@ -141,5 +145,6 @@ clean:
 
 distclean: clean
 	m -rf aviize
-	m -rf iestade
+	m -rf iestaade
 	m -rf rododendrs
+	m -rf vasarniica

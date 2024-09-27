@@ -1,7 +1,7 @@
 #include <string>
 #include <vector>
 
-#include "iestade.hpp"
+#include "iestaade.hpp"
 #include "lapsa.hpp"
 #include "rododendrs.hpp"
 
@@ -26,7 +26,7 @@ private:
 public:
     explicit MyState(lapsa::Settings& in_settings) :
         State(in_settings),
-        _data(iestade::size_t_from_json(CONFIG_PATH, "state/data_size"))
+        _data(iestaade::size_t_from_json(CONFIG_PATH, "state/data_size"))
     {
     }
 
