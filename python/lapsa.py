@@ -11,7 +11,7 @@ import pandas as pd
 import vplot
 
 
-DATA_COL_I = "state_i"
+DATA_COL_I = "run_i"
 DATA_COL_T = "temperature"
 DATA_COL_E = "energy"
 DATA_COL_V = "value"
