@@ -8,7 +8,7 @@
 const std::string CONFIG_PATH =
         "examples/max_array_cooling_schedule_config.json";
 
-class MyState : lapsa::State {
+class MyState : public lapsa::State {
 private:
     std::vector<double> _data;
 
@@ -48,8 +48,6 @@ public:
         std::generate(_data.begin(), _data.end(), []() {
             return rododendrs::rnd01();
         });
-
-        reset_evaluation();
     }
 
     void change() override
@@ -57,8 +55,6 @@ public:
         assert(_data.size() != 0);
         size_t changed_i = rododendrs::rnd01() * _data.size();
         _data[changed_i] = rododendrs::rnd01();
-
-        reset_evaluation();
     }
 };
 

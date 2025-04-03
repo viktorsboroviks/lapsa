@@ -69,6 +69,7 @@ protected:
     double _energy;
     double _value;
 
+public:
     void reset_evaluation()
     {
         _evaluated = false;
@@ -76,7 +77,6 @@ protected:
         _value     = -1;
     }
 
-public:
     explicit State(Settings &in_settings) :
         _settings(in_settings)
     {
@@ -100,14 +100,11 @@ public:
 
     virtual void randomize()
     {
-        reset_evaluation();
         std::cout << "error: randomize method not implemented" << std::endl;
     }
 
     virtual void change()
     {
-        reset_evaluation();
-
         // this method is very individual-specific, so to not overthink it
         // I leave it virtual
         std::cout << "error: change method not implemented" << std::endl;
@@ -398,6 +395,7 @@ template <typename TState>
 void state_randomize(Context<TState> &c)
 {
     assert(c.run_i == 1);
+    c.state.reset_evaluation();
     c.state.randomize();
 }
 
@@ -405,6 +403,7 @@ template <typename TState>
 void state_propose_new(Context<TState> &c)
 {
     c.proposed_state = c.state;
+    c.proposed_state.reset_evaluation();
     c.proposed_state.change();
 }
 

@@ -16,7 +16,7 @@ all: examples
 
 aviize:
 	git clone git@github.com:viktorsboroviks/aviize.git
-	cd iestaade; git checkout v1.5
+	cd aviize; git checkout v1.5
 
 iestaade:
 	git clone git@github.com:viktorsboroviks/iestaade.git

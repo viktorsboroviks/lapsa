@@ -8,7 +8,7 @@
 const std::string CONFIG_PATH =
         "examples/max_array_adaptive_cooling_config.json";
 
-class MyState : lapsa::State {
+class MyState : public lapsa::State {
 private:
     std::vector<double> _data;
 
