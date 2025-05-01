@@ -19,6 +19,75 @@
 namespace lapsa {
 
 // tools
+class Schedule {
+private:
+    struct Period {
+        size_t i_start;
+        size_t period;
+    };
+
+    std::vector<Period> _periods;
+
+    void _init_periods(const std::string &config_path,
+                       const std::string &key_path,
+                       std::vector<Period> &periods)
+    {
+        const boost::json::array periods_json =
+                iestaade::value_from_json(config_path, key_path).as_array();
+        assert(periods_json.size() > 0);
+        assert(periods.empty());
+
+        for (const boost::json::value &period_json : periods_json) {
+            Period new_period;
+            new_period.i_start = period_json.as_array()[0].to_number<size_t>();
+            new_period.period  = period_json.as_array()[1].to_number<size_t>();
+            periods.push_back(new_period);
+        }
+    }
+
+    size_t _i_period(size_t i, const std::vector<Period> &periods) const
+    {
+        assert(!periods.empty());
+
+        // check i
+        if (i < periods.front().i_start) {
+            return 0;
+        }
+
+        // go over all periods
+        for (size_t i_period = 0; i_period + 1 < periods.size(); i_period++) {
+            // find first that fits
+            if (i >= periods[i_period].i_start &&
+                i < periods[i_period + 1].i_start) {
+                return i_period;
+            }
+        }
+
+        // only last period remains
+        if (i >= periods.back().i_start) {
+            return periods.size() - 1;
+        }
+        else {
+            assert(false);
+            return 0;
+        }
+    }
+
+public:
+    Schedule() {}
+
+    Schedule(const std::string &config_path, const std::string &key_path)
+    {
+        _init_periods(config_path, key_path, _periods);
+    }
+
+    bool is_time(size_t i) const
+    {
+        const size_t i_period = _i_period(i, _periods);
+        return i % _periods[i_period].period == 0;
+    }
+};
+
 struct Settings {
     size_t n_states            = 1000000;
     double init_p_acceptance   = 0.99;
@@ -38,6 +107,7 @@ struct Settings {
     std::string stats_file_name   = "stats.txt";
 
     size_t n_records = 0;
+    Schedule rec_schedule;
 
     Settings() {}
 
@@ -58,7 +128,8 @@ struct Settings {
         e_min_az_overlap    (iestaade::double_from_json(config_filepath, key_path_prefix + "/e_min_az_overlap")),
         log_file_name       (iestaade::string_from_json(config_filepath, key_path_prefix + "/log_file_name")),
         stats_file_name     (iestaade::string_from_json(config_filepath, key_path_prefix + "/stats_file_name")),
-        n_records           (iestaade::size_t_from_json(config_filepath, key_path_prefix + "/n_records", true, 0))
+        n_records           (iestaade::size_t_from_json(config_filepath, key_path_prefix + "/n_records", true, 0)),
+        rec_schedule(config_filepath, key_path_prefix + "/rec_periods")
     {
     }
     // clang-format on
@@ -75,12 +146,12 @@ public:
     void reset_evaluation()
     {
         _evaluated = false;
-        _energy    = -1;
-        _value     = -1;
     }
 
     explicit State(Settings &in_settings) :
-        _settings(in_settings)
+        _settings(in_settings),
+        _energy(-1),
+        _value(-1)
     {
         reset_evaluation();
     }
@@ -247,7 +318,7 @@ void init_log(Context<TState> &c)
     }
 
     c.log_f.open(c.settings.log_file_name);
-    c.log_f << "run_i,temperature,energy,value" << std::endl;
+    c.log_f << "run_i,t,e,v" << std::endl;
 }
 
 template <typename TState>
@@ -379,8 +450,9 @@ void progress_clear(Context<TState> &c)
 template <typename TState>
 void stats_print(Context<TState> &c)
 {
-    const std::string stats = c.get_stats();
-    aviize::print(stats);
+    std::stringstream ss{};
+    ss << c.get_stats();
+    aviize::print(ss);
 }
 
 template <typename TState>
@@ -461,6 +533,10 @@ void decide_init_done(Context<TState> &c)
     }
 #ifndef NDEBUG
     if (c.init_t_history_failed_i > c.settings.init_t_history_len) {
+        std::cerr << "init_t_history_failed_i: " << c.init_t_history_failed_i
+                  << std::endl;
+        std::cerr << "init_t_history_len: " << c.settings.init_t_history_len
+                  << std::endl;
         assert(false);
     }
 #endif
@@ -483,6 +559,12 @@ void update_state(Context<TState> &c)
         c.state = c.proposed_state;
         return;
     }
+}
+
+template <typename TState>
+void reset_state_evaluation(Context<TState> &c)
+{
+    c.state.reset_evaluation();
 }
 
 template <typename TState>
@@ -723,6 +805,21 @@ void init_rec_at_rate(Context<TState> &c)
         run_i *= rec_rate;
     }
     assert(c.rec_states_queue.size() == c.settings.n_records);
+}
+
+template <typename TState>
+void init_rec_periods(Context<TState> &c)
+{
+    // record state queue holds the
+    // numbers of all states that must produce a record
+    // - always starts with 1
+    // - always end n_states
+    assert(c.rec_states_queue.empty());
+    for (size_t i = 1; i <= c.settings.n_states; i++) {
+        if (c.settings.rec_schedule.is_time(i)) {
+            c.rec_states_queue.push(i);
+        }
+    }
 }
 
 template <typename TState>

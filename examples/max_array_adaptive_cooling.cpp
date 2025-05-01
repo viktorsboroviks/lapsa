@@ -67,44 +67,45 @@ int main()
     lapsa::Settings s(CONFIG_PATH, "lapsa");
     lapsa::StateMachine<MyState> sm{s};
     sm.init_functions = {
-            lapsa::log_init<MyState>,
-            lapsa::state_randomize<MyState>,
+            lapsa::init_log<MyState>,
+            lapsa::randomize_state<MyState>,
     };
     sm.init_loop_functions = {
-            lapsa::state_propose_new<MyState>,
-            lapsa::temperature_init_record<MyState>,
-            lapsa::temperature_init_select_as_max<MyState>,
-            lapsa::run_progress_init<MyState>,
-            lapsa::init_done_decide<MyState>,
+            // update state
+            lapsa::propose_new_state<MyState>,
+            lapsa::init_t_history<MyState>,
+            lapsa::init_t_select_max<MyState>,
+            lapsa::init_progress<MyState>,
+            // decide to proceed
+            lapsa::decide_init_done<MyState>,
     };
     sm.run_loop_functions = {
             // log
-            lapsa::log_update<MyState>,
-            // report
-            lapsa::run_progress_text_reset<MyState>,
-            lapsa::run_progress_text_add_total<MyState>,
-            lapsa::run_progress_text_add_pct<MyState>,
-            lapsa::run_progress_text_add_eta<MyState>,
-            lapsa::run_progress_text_add_t<MyState>,
-            lapsa::run_progress_text_add_e<MyState>,
-            lapsa::run_progress_text_add_v<MyState>,
-            lapsa::run_progress_print<MyState>,
-            // decide to proceed
-            lapsa::run_done_decide<MyState>,
-            // proceed
-            lapsa::state_propose_new<MyState>,
-            lapsa::log_energy<MyState>,
-            lapsa::do_cool_decide_sma<MyState>,
-            //            lapsa::do_cool_decide_min_sd<MyState>,
-            //            lapsa::do_cool_decide_az<MyState>,
+            lapsa::update_log<MyState>,
+            // progress bar
+            lapsa::progress_text_reset<MyState>,
+            lapsa::progress_text_add_total<MyState>,
+            lapsa::progress_text_add_pct<MyState>,
+            lapsa::progress_text_add_eta<MyState>,
+            lapsa::progress_text_add_t<MyState>,
+            lapsa::progress_text_add_e<MyState>,
+            lapsa::progress_text_add_v<MyState>,
+            lapsa::progress_print<MyState>,
+            // decide to proceed and begin next run
+            lapsa::decide_run_done<MyState>,
+            // update state
+            lapsa::propose_new_state<MyState>,
+            lapsa::e_history_update<MyState>,
+            lapsa::decide_cool_sma<MyState>,
             lapsa::cool_at_rate<MyState>,
-            lapsa::state_update<MyState>,
+            lapsa::update_state<MyState>,
     };
     sm.finalize_functions = {
-            lapsa::run_progress_clear<MyState>,
+            lapsa::progress_clear<MyState>,
             lapsa::stats_print<MyState>,
             lapsa::stats_create_file<MyState>,
     };
+
     sm.run();
     return 0;
 }
