@@ -350,7 +350,18 @@ void init_progress(Context<TState> &c)
 template <typename TState>
 void progress_text_reset(Context<TState> &c)
 {
-    c.progress.text.clear();
+    c.progress.reset();
+}
+
+bool last_line_empty(const std::string &text)
+{
+    return (text.empty() || text.back() == '\n' || text.back() == '\r');
+}
+
+template <typename TState>
+void progress_text_add_nl(Context<TState> &c)
+{
+    c.progress.text += "\n";
 }
 
 template <typename TState>
@@ -367,7 +378,7 @@ void progress_text_add_stats(Context<TState> &c)
 template <typename TState>
 void progress_text_add_total(Context<TState> &c)
 {
-    if (!c.progress.text.empty()) {
+    if (!last_line_empty(c.progress.text)) {
         c.progress.text += " ";
     }
     c.progress.text += c.progress.str_total(c.run_i);
@@ -376,7 +387,7 @@ void progress_text_add_total(Context<TState> &c)
 template <typename TState>
 void progress_text_add_pct(Context<TState> &c)
 {
-    if (!c.progress.text.empty()) {
+    if (!last_line_empty(c.progress.text)) {
         c.progress.text += " ";
     }
     c.progress.text += c.progress.str_pct(c.run_i);
@@ -385,7 +396,7 @@ void progress_text_add_pct(Context<TState> &c)
 template <typename TState>
 void progress_text_add_eta(Context<TState> &c)
 {
-    if (!c.progress.text.empty()) {
+    if (!last_line_empty(c.progress.text)) {
         c.progress.text += " ";
     }
     c.progress.text += c.progress.str_eta(c.run_i);
@@ -394,7 +405,7 @@ void progress_text_add_eta(Context<TState> &c)
 template <typename TState>
 void progress_text_add_e(Context<TState> &c)
 {
-    if (!c.progress.text.empty()) {
+    if (!last_line_empty(c.progress.text)) {
         c.progress.text += " ";
     }
     std::ostringstream oss;
@@ -405,7 +416,7 @@ void progress_text_add_e(Context<TState> &c)
 template <typename TState>
 void progress_text_add_t(Context<TState> &c)
 {
-    if (!c.progress.text.empty()) {
+    if (!last_line_empty(c.progress.text)) {
         c.progress.text += " ";
     }
     std::ostringstream oss;
@@ -416,7 +427,7 @@ void progress_text_add_t(Context<TState> &c)
 template <typename TState>
 void progress_text_add_v(Context<TState> &c)
 {
-    if (!c.progress.text.empty()) {
+    if (!last_line_empty(c.progress.text)) {
         c.progress.text += " ";
     }
     std::ostringstream oss;
@@ -427,7 +438,7 @@ void progress_text_add_v(Context<TState> &c)
 template <typename TState>
 void progress_text_add_freq(Context<TState> &c)
 {
-    if (!c.progress.text.empty()) {
+    if (!last_line_empty(c.progress.text)) {
         c.progress.text += " ";
     }
     const double run_s = 1 / c.cycle_time_us * 1000000;
@@ -441,7 +452,7 @@ void progress_print(Context<TState> &c)
 }
 
 template <typename TState>
-void progress_clear(Context<TState> &c)
+void progress_clear_line(Context<TState> &c)
 {
     aviize::erase_line(c.progress.text);
     c.progress.print();

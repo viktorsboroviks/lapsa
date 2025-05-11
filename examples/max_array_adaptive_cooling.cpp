@@ -101,7 +101,7 @@ int main()
             lapsa::update_state<MyState>,
     };
     sm.finalize_functions = {
-            lapsa::progress_clear<MyState>,
+            lapsa::progress_text_reset<MyState>,
             lapsa::stats_print<MyState>,
             lapsa::stats_create_file<MyState>,
     };
