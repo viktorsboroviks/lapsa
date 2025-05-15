@@ -232,7 +232,7 @@ public:
                                                                  start_time)
                         .count();
         const double run_s           = run_i / runtime_s;
-        const size_t first_col_width = 22;
+        const size_t first_col_width = 16;
         std::stringstream ss{};
         // standard parameters
         ss << std::left << std::setw(first_col_width) << "states" << run_i
