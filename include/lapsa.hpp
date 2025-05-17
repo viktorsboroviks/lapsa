@@ -1,3 +1,5 @@
+// #define LAPSA_DEBUG
+
 #include <atomic>
 #include <cassert>
 #include <chrono>
@@ -15,6 +17,14 @@
 #include "aviize.hpp"
 #include "iestaade.hpp"
 #include "rododendrs.hpp"
+
+#ifdef LAPSA_DEBUG
+#define debug_lapsa(x)                                                  \
+    std::cout << "debug (" << __FILE__ << ":" << __LINE__ << "): " << x \
+              << std::endl;
+#else
+#define debug_lapsa(x) while (0)
+#endif
 
 namespace lapsa {
 
