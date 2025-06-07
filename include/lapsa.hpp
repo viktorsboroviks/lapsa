@@ -147,7 +147,6 @@ struct Settings {
 
 class State {
 protected:
-    Settings _settings;
     bool _evaluated;
     double _energy;
     double _value;
@@ -158,8 +157,7 @@ public:
         _evaluated = false;
     }
 
-    explicit State(Settings &in_settings) :
-        _settings(in_settings),
+    explicit State() :
         _energy(-1),
         _value(-1)
     {
@@ -197,7 +195,7 @@ public:
 template <typename TState>
 class Context {
 public:
-    Settings settings;
+    const Settings *p_settings;
 
     double temperature = 0;
     bool do_cool       = false;
@@ -226,12 +224,10 @@ public:
     std::queue<size_t> rec_states_queue;
     bool do_rec = false;
 
-    explicit Context(Settings &s) :
-        settings(s),
-        state(settings),
-        proposed_state(settings),
-        e_history_len(std::max(settings.e_sma_slow_len,
-                               settings.e_shift + settings.e_window))
+    explicit Context(const Settings *s) :
+        p_settings(s),
+        e_history_len(std::max(p_settings->e_sma_slow_len,
+                               p_settings->e_shift + p_settings->e_window))
     {
     }
 
@@ -272,7 +268,7 @@ public:
     std::vector<state_function_t> run_loop_functions{};
     std::vector<state_function_t> finalize_functions{};
 
-    explicit StateMachine(Settings &s) :
+    explicit StateMachine(const Settings *s) :
         _context(s)
     {
     }
@@ -323,11 +319,11 @@ template <typename TState>
 void init_log(Context<TState> &c)
 {
     assert(!c.log_f.is_open());
-    if (c.settings.log_file_name.empty()) {
+    if (c.p_settings->log_file_name.empty()) {
         return;
     }
 
-    c.log_f.open(c.settings.log_file_name);
+    c.log_f.open(c.p_settings->log_file_name);
     c.log_f << "run_i,t,e,v" << std::endl;
 }
 
@@ -335,7 +331,7 @@ template <typename TState>
 void update_log(Context<TState> &c)
 {
     // write the log to file
-    assert(!c.settings.log_file_name.empty());
+    assert(!c.p_settings->log_file_name.empty());
     if (!c.log_f.is_open()) {
         return;
     }
@@ -352,8 +348,8 @@ void init_progress(Context<TState> &c)
 {
     if (c.temperature > 0) {
         c.progress.n_min         = 1;
-        c.progress.n_max         = c.settings.n_states;
-        c.progress.update_period = c.settings.progress_update_period;
+        c.progress.n_max         = c.p_settings->n_states;
+        c.progress.update_period = c.p_settings->progress_update_period;
     }
 }
 
@@ -479,11 +475,11 @@ void stats_print(Context<TState> &c)
 template <typename TState>
 void stats_create_file(Context<TState> &c)
 {
-    if (c.settings.stats_file_name.empty()) {
+    if (c.p_settings->stats_file_name.empty()) {
         return;
     }
 
-    std::ofstream f(c.settings.stats_file_name);
+    std::ofstream f(c.p_settings->stats_file_name);
     f << c.get_stats();
 }
 
@@ -515,11 +511,11 @@ void init_t_history(Context<TState> &c)
     // - only for cases where new state is worse and we need
     //   to use the p_acceptance
     // - smaller energy = better
-    assert(c.init_t_history.size() < c.settings.init_t_history_len);
+    assert(c.init_t_history.size() < c.p_settings->init_t_history_len);
 
     const double dE = c.proposed_state.get_energy() - c.state.get_energy();
     if (dE > 0) {
-        const double t = -dE / std::log(c.settings.init_p_acceptance);
+        const double t = -dE / std::log(c.p_settings->init_p_acceptance);
         assert(t > 0);
         c.init_t_history.push_back(t);
         c.init_t_history_failed_i = 0;
@@ -532,11 +528,11 @@ void init_t_history(Context<TState> &c)
 template <typename TState>
 void init_t_select_max(Context<TState> &c)
 {
-    if (c.init_t_history.size() < c.settings.init_t_history_len) {
+    if (c.init_t_history.size() < c.p_settings->init_t_history_len) {
         return;
     }
 
-    assert(c.init_t_history.size() == c.settings.init_t_history_len);
+    assert(c.init_t_history.size() == c.p_settings->init_t_history_len);
     assert(c.temperature == 0);
     assert(c.t_max == 0);
 
@@ -549,14 +545,14 @@ void init_t_select_max(Context<TState> &c)
 template <typename TState>
 void decide_init_done(Context<TState> &c)
 {
-    if (c.init_t_history.size() == c.settings.init_t_history_len) {
+    if (c.init_t_history.size() == c.p_settings->init_t_history_len) {
         c.init_done = true;
     }
 #ifndef NDEBUG
-    if (c.init_t_history_failed_i > c.settings.init_t_history_len) {
+    if (c.init_t_history_failed_i > c.p_settings->init_t_history_len) {
         std::cerr << "init_t_history_failed_i: " << c.init_t_history_failed_i
                   << std::endl;
-        std::cerr << "init_t_history_len: " << c.settings.init_t_history_len
+        std::cerr << "init_t_history_len: " << c.p_settings->init_t_history_len
                   << std::endl;
         assert(false);
     }
@@ -598,18 +594,18 @@ void do_cool_set(Context<TState> &c)
 template <typename TState>
 void cool_at_rate(Context<TState> &c)
 {
-    assert(c.settings.cooling_rate > 0);
-    assert(c.settings.cooling_rate <= 1);
+    assert(c.p_settings->cooling_rate > 0);
+    assert(c.p_settings->cooling_rate <= 1);
     assert(c.temperature <= c.t_max);
     assert(c.temperature >= 0);
     if (c.do_cool) {
         // t = T0 * a^(i/R)
         // ref:
         // https://www.cicirello.org/publications/CP2007-Autonomous-Search-Workshop.pdf
-        c.temperature =
-                c.t_max * std::pow(c.settings.cooling_rate,
-                                   std::floor(c.cooling_i /
-                                              c.settings.cooling_round_len));
+        c.temperature = c.t_max *
+                        std::pow(c.p_settings->cooling_rate,
+                                 std::floor(c.cooling_i /
+                                            c.p_settings->cooling_round_len));
         c.cooling_i++;
 
         if (c.temperature < 0) {
@@ -638,14 +634,14 @@ void e_history_update(Context<TState> &c)
 template <typename TState>
 void decide_cool_sma(Context<TState> &c)
 {
-    assert(c.settings.e_sma_fast_len < c.settings.e_sma_slow_len);
+    assert(c.p_settings->e_sma_fast_len < c.p_settings->e_sma_slow_len);
     assert(!c.do_cool);
     if (c.e_history.size() < c.e_history_len) {
         return;
     }
 
-    assert(c.settings.e_decision_period > 0);
-    if (c.run_i % c.settings.e_decision_period) {
+    assert(c.p_settings->e_decision_period > 0);
+    if (c.run_i % c.p_settings->e_decision_period) {
         return;
     }
 
@@ -654,16 +650,16 @@ void decide_cool_sma(Context<TState> &c)
 
     // calculate avg(energy) at two intervals in the past
     double sum_e_sma_fast = 0;
-    for (size_t i = 0; i < c.settings.e_sma_fast_len; i++) {
+    for (size_t i = 0; i < c.p_settings->e_sma_fast_len; i++) {
         sum_e_sma_fast += c.e_history[i];
     }
-    const double e_sma_fast = sum_e_sma_fast / c.settings.e_sma_fast_len;
+    const double e_sma_fast = sum_e_sma_fast / c.p_settings->e_sma_fast_len;
 
     double sum_e_sma_slow = 0;
-    for (size_t i = 0; i < c.settings.e_sma_slow_len; i++) {
+    for (size_t i = 0; i < c.p_settings->e_sma_slow_len; i++) {
         sum_e_sma_slow += c.e_history[i];
     }
-    const double e_sma_slow = sum_e_sma_slow / c.settings.e_sma_slow_len;
+    const double e_sma_slow = sum_e_sma_slow / c.p_settings->e_sma_slow_len;
 
     if (e_sma_fast > e_sma_slow) {
         c.do_cool = true;
@@ -673,9 +669,10 @@ void decide_cool_sma(Context<TState> &c)
 template <typename TState>
 void decide_cool_min_sd(Context<TState> &c)
 {
-    assert(c.settings.e_window > 0);
-    assert(c.settings.e_shift > 0);
-    const size_t req_e_history_len = c.settings.e_shift + c.settings.e_window;
+    assert(c.p_settings->e_window > 0);
+    assert(c.p_settings->e_shift > 0);
+    const size_t req_e_history_len =
+            c.p_settings->e_shift + c.p_settings->e_window;
     assert(c.e_history_len == req_e_history_len);
 
     assert(!c.do_cool);
@@ -683,8 +680,8 @@ void decide_cool_min_sd(Context<TState> &c)
         return;
     }
 
-    assert(c.settings.e_decision_period > 0);
-    if (c.run_i % c.settings.e_decision_period) {
+    assert(c.p_settings->e_decision_period > 0);
+    if (c.run_i % c.p_settings->e_decision_period) {
         return;
     }
 
@@ -693,16 +690,16 @@ void decide_cool_min_sd(Context<TState> &c)
 
     // calculate energy at two intervals in the past
     const auto front_begin = c.e_history.begin();
-    const auto front_end   = c.e_history.begin() + c.settings.e_window;
+    const auto front_end   = c.e_history.begin() + c.p_settings->e_window;
     const std::vector<double> front_window(front_begin, front_end);
-    assert(front_window.size() == c.settings.e_window);
+    assert(front_window.size() == c.p_settings->e_window);
     const double front_sd = rododendrs::sd<std::vector>(front_window);
 
-    const auto back_begin = c.e_history.begin() + c.settings.e_shift;
-    const auto back_end =
-            c.e_history.begin() + c.settings.e_window + c.settings.e_shift;
+    const auto back_begin = c.e_history.begin() + c.p_settings->e_shift;
+    const auto back_end   = c.e_history.begin() + c.p_settings->e_window +
+                          c.p_settings->e_shift;
     const std::vector<double> back_window(back_begin, back_end);
-    assert(back_window.size() == c.settings.e_window);
+    assert(back_window.size() == c.p_settings->e_window);
     const double back_mean = rododendrs::mean<std::vector>(back_window);
     const double back_sd   = rododendrs::sd<std::vector>(back_window);
 
@@ -714,9 +711,10 @@ void decide_cool_min_sd(Context<TState> &c)
 template <typename TState>
 void decide_cool_az(Context<TState> &c)
 {
-    assert(c.settings.e_window > 0);
-    assert(c.settings.e_shift > 0);
-    const size_t req_e_history_len = c.settings.e_shift + c.settings.e_window;
+    assert(c.p_settings->e_window > 0);
+    assert(c.p_settings->e_shift > 0);
+    const size_t req_e_history_len =
+            c.p_settings->e_shift + c.p_settings->e_window;
     assert(c.e_history_len == req_e_history_len);
 
     assert(!c.do_cool);
@@ -724,8 +722,8 @@ void decide_cool_az(Context<TState> &c)
         return;
     }
 
-    assert(c.settings.e_decision_period > 0);
-    if (c.run_i % c.settings.e_decision_period) {
+    assert(c.p_settings->e_decision_period > 0);
+    if (c.run_i % c.p_settings->e_decision_period) {
         return;
     }
 
@@ -734,28 +732,28 @@ void decide_cool_az(Context<TState> &c)
 
     // calculate energy at two intervals in the past
     const auto front_begin = c.e_history.begin();
-    const auto front_end   = c.e_history.begin() + c.settings.e_window;
+    const auto front_end   = c.e_history.begin() + c.p_settings->e_window;
     const std::vector<double> front_window(front_begin, front_end);
-    assert(front_window.size() == c.settings.e_window);
+    assert(front_window.size() == c.p_settings->e_window);
     const double front_mean = rododendrs::mean<std::vector>(front_window);
     const double front_sd   = rododendrs::sd<std::vector>(front_window);
 
-    const auto back_begin = c.e_history.begin() + c.settings.e_shift;
-    const auto back_end =
-            c.e_history.begin() + c.settings.e_window + c.settings.e_shift;
+    const auto back_begin = c.e_history.begin() + c.p_settings->e_shift;
+    const auto back_end   = c.e_history.begin() + c.p_settings->e_window +
+                          c.p_settings->e_shift;
     const std::vector<double> back_window(back_begin, back_end);
-    assert(back_window.size() == c.settings.e_window);
+    assert(back_window.size() == c.p_settings->e_window);
     const double back_mean = rododendrs::mean<std::vector>(back_window);
     const double back_sd   = rododendrs::sd<std::vector>(back_window);
 
     const double az_overlap =
             rododendrs::az_pdf_overlap<double>(front_mean,
                                                front_sd,
-                                               c.settings.e_window,
+                                               c.p_settings->e_window,
                                                back_mean,
                                                back_sd,
-                                               c.settings.e_window);
-    if (az_overlap >= c.settings.e_min_az_overlap) {
+                                               c.p_settings->e_window);
+    if (az_overlap >= c.p_settings->e_min_az_overlap) {
         c.do_cool = true;
     }
 }
@@ -766,7 +764,7 @@ void decide_run_done(Context<TState> &c)
     assert(c.temperature <= c.t_max);
     assert(c.temperature >= 0);
     assert(!c.run_done);
-    if (c.run_i == c.settings.n_states) {
+    if (c.run_i == c.p_settings->n_states) {
         c.run_done = true;
     }
 }
@@ -780,14 +778,14 @@ void init_rec_linear(Context<TState> &c)
     // - always end n_states
     assert(c.rec_states_queue.empty());
     c.rec_states_queue.push(1);
-    assert(c.settings.n_records > 0);
+    assert(c.p_settings->n_records > 0);
     const double rec_step =
-            c.settings.n_states / (double)(c.settings.n_records - 1);
-    for (size_t rec_i = 1; rec_i < c.settings.n_records - 1; rec_i++) {
+            c.p_settings->n_states / (double)(c.p_settings->n_records - 1);
+    for (size_t rec_i = 1; rec_i < c.p_settings->n_records - 1; rec_i++) {
         c.rec_states_queue.push(static_cast<size_t>(rec_step * rec_i));
     }
-    c.rec_states_queue.push(c.settings.n_states);
-    assert(c.rec_states_queue.size() == c.settings.n_records);
+    c.rec_states_queue.push(c.p_settings->n_states);
+    assert(c.rec_states_queue.size() == c.p_settings->n_records);
 }
 
 template <typename TState>
@@ -805,27 +803,27 @@ void init_rec_at_rate(Context<TState> &c)
     // k ^ (n_records-1) = n_states/a
     // k = (n_states/a) ^ 1/(n_records-1)
     // k = n_states ^ 1/(n_records-1)
-    assert(c.settings.n_records > 0);
+    assert(c.p_settings->n_records > 0);
     const double float_err_compensation = 1e-5;
-    const double rec_rate               = std::pow(c.settings.n_states,
-                                     1 / (double)(c.settings.n_records - 1));
+    const double rec_rate               = std::pow(
+            c.p_settings->n_states, 1 / (double)(c.p_settings->n_records - 1));
 
     double run_i = 1;
-    for (size_t rec_i = 1; rec_i <= c.settings.n_records; rec_i++) {
+    for (size_t rec_i = 1; rec_i <= c.p_settings->n_records; rec_i++) {
 #ifndef NDEBUG
         if (rec_i == 1) {
             assert(static_cast<size_t>(run_i) == 1);
         }
-        if (rec_i == c.settings.n_records) {
+        if (rec_i == c.p_settings->n_records) {
             assert(static_cast<size_t>(run_i + float_err_compensation) ==
-                   c.settings.n_states);
+                   c.p_settings->n_states);
         }
 #endif
         c.rec_states_queue.push(
                 static_cast<size_t>(run_i + float_err_compensation));
         run_i *= rec_rate;
     }
-    assert(c.rec_states_queue.size() == c.settings.n_records);
+    assert(c.rec_states_queue.size() == c.p_settings->n_records);
 }
 
 template <typename TState>
@@ -836,8 +834,8 @@ void init_rec_periods(Context<TState> &c)
     // - always starts with 1
     // - always end n_states
     assert(c.rec_states_queue.empty());
-    for (size_t i = 1; i <= c.settings.n_states; i++) {
-        if (c.settings.rec_schedule.is_time(i)) {
+    for (size_t i = 1; i <= c.p_settings->n_states; i++) {
+        if (c.p_settings->rec_schedule.is_time(i)) {
             c.rec_states_queue.push(i);
         }
     }
