@@ -28,6 +28,12 @@
 
 namespace lapsa {
 
+// utility
+bool last_line_empty(const std::string &text)
+{
+    return (text.empty() || text.back() == '\n' || text.back() == '\r');
+}
+
 // tools
 class Schedule {
 private:
@@ -101,7 +107,7 @@ public:
 struct Settings {
     size_t n_states            = 1000000;
     double init_p_acceptance   = 0.99;
-    size_t init_t_history_len  = 100;
+    size_t init_t_candidates_n = 100;
     size_t init_t_max_attempts = 100;
     double cooling_rate        = 0.95;
     size_t cooling_round_len   = 1;
@@ -111,6 +117,7 @@ struct Settings {
     size_t e_window            = 100;
     size_t e_shift             = 100;
     double e_min_az_overlap    = 0.99;
+    size_t e_history_len;
 
     size_t progress_update_period = 1;
     std::string log_file_name     = "log.csv";
@@ -126,7 +133,7 @@ struct Settings {
              const std::string& key_path_prefix) :
         n_states            (iestaade::size_t_from_json(config_filepath, key_path_prefix + "/n_states")),
         init_p_acceptance   (iestaade::double_from_json(config_filepath, key_path_prefix + "/init_p_acceptance")),
-        init_t_history_len  (iestaade::size_t_from_json(config_filepath, key_path_prefix + "/init_t_history_len")),
+        init_t_candidates_n (iestaade::size_t_from_json(config_filepath, key_path_prefix + "/init_t_candidates_n")),
         init_t_max_attempts (iestaade::size_t_from_json(config_filepath, key_path_prefix + "/init_t_max_attempts")),
         cooling_rate        (iestaade::double_from_json(config_filepath, key_path_prefix + "/cooling_rate")),
         cooling_round_len   (iestaade::size_t_from_json(config_filepath, key_path_prefix + "/cooling_round_len")),
@@ -136,6 +143,7 @@ struct Settings {
         e_window            (iestaade::size_t_from_json(config_filepath, key_path_prefix + "/e_window")),
         e_shift             (iestaade::size_t_from_json(config_filepath, key_path_prefix + "/e_shift")),
         e_min_az_overlap    (iestaade::double_from_json(config_filepath, key_path_prefix + "/e_min_az_overlap")),
+        e_history_len       (std::max(e_sma_slow_len, e_shift + e_window)),
         log_file_name       (iestaade::string_from_json(config_filepath, key_path_prefix + "/log_file_name")),
         stats_file_name     (iestaade::string_from_json(config_filepath, key_path_prefix + "/stats_file_name")),
         n_records           (iestaade::size_t_from_json(config_filepath, key_path_prefix + "/n_records", true, 0)),
@@ -193,42 +201,95 @@ public:
 };
 
 template <typename TState>
-class Context {
-public:
+struct StateMachine {
+    // settings
+    typedef std::function<void(void)> state_function_t;
     const Settings *p_settings;
 
-    double temperature = 0;
-    bool do_cool       = false;
-    size_t cooling_i   = 0;
-    TState state;
-    TState proposed_state;
+    // init
+#ifndef NDEBUG
+    std::size_t init_t_candidates_failed_n = 0;
+#endif
+    bool init_done = false;
 
-    std::vector<double> init_t_history;
-    std::size_t init_t_history_failed_i = 0;
-    bool init_done                      = false;
-
+    // runtime
     // important! states begin with 1st, not 0th
-    double t_max = 0;
-    size_t run_i = 1;
-    std::deque<double> e_history;
-    size_t e_history_len;
-    bool run_done = false;
+    double t         = 0;
+    double t_max     = 0;
+    bool do_cool     = false;
+    size_t cooling_i = 0;
+    size_t run_i     = 1;
+    bool run_done    = false;
+    bool do_rec      = false;
 
+    // performance
     std::chrono::time_point<std::chrono::steady_clock> start_time;
     std::chrono::time_point<std::chrono::steady_clock> stop_time;
     double cycle_time_us = 0;
 
+    // history
+    std::vector<double> init_t_candidates;
+    std::deque<double> e_history;
+    std::queue<size_t> rec_states_queue;
+
+    // data display and logging
     aviize::Progress progress;
     std::ofstream log_f;
 
-    std::queue<size_t> rec_states_queue;
-    bool do_rec = false;
+    // state
+    TState state;
+    TState proposed_state;
 
-    explicit Context(const Settings *s) :
-        p_settings(s),
-        e_history_len(std::max(p_settings->e_sma_slow_len,
-                               p_settings->e_shift + p_settings->e_window))
+    // state machine functions
+    std::vector<state_function_t> init_functions{};
+    std::vector<state_function_t> init_loop_functions{};
+    std::vector<state_function_t> run_loop_functions{};
+    std::vector<state_function_t> finalize_functions{};
+
+    explicit StateMachine(const Settings *s) :
+        p_settings(s)
     {
+    }
+
+    void run()
+    {
+        start_time = std::chrono::steady_clock::now();
+        for (const state_function_t &f : init_functions) {
+            f();
+        }
+        auto cycle_begin_time = std::chrono::steady_clock::now();
+        while (init_loop_functions.size() > 0 && !init_done) {
+            for (const state_function_t &f : init_loop_functions) {
+                if (init_done) {
+                    break;
+                }
+                f();
+            }
+            auto cycle_end_time = std::chrono::steady_clock::now();
+            cycle_time_us =
+                    std::chrono::duration_cast<std::chrono::microseconds>(
+                            cycle_end_time - cycle_begin_time)
+                            .count();
+            cycle_begin_time = cycle_end_time;
+        }
+        while (run_loop_functions.size() > 0 && !run_done) {
+            for (const state_function_t &f : run_loop_functions) {
+                if (run_done) {
+                    break;
+                }
+                f();
+            }
+            auto cycle_end_time = std::chrono::steady_clock::now();
+            cycle_time_us =
+                    std::chrono::duration_cast<std::chrono::microseconds>(
+                            cycle_end_time - cycle_begin_time)
+                            .count();
+            cycle_begin_time = cycle_end_time;
+        }
+        stop_time = std::chrono::steady_clock::now();
+        for (const state_function_t &f : finalize_functions) {
+            f();
+        }
     }
 
     std::string get_stats()
@@ -254,603 +315,508 @@ public:
            << state.get_value() << std::endl;
         return ss.str();
     }
-};
 
-template <typename TState>
-class StateMachine {
-private:
-    typedef std::function<void(Context<TState> &)> state_function_t;
-    Context<TState> _context;
-
-public:
-    std::vector<state_function_t> init_functions{};
-    std::vector<state_function_t> init_loop_functions{};
-    std::vector<state_function_t> run_loop_functions{};
-    std::vector<state_function_t> finalize_functions{};
-
-    explicit StateMachine(const Settings *s) :
-        _context(s)
+    void init_log()
     {
+        assert(!log_f.is_open());
+        if (p_settings->log_file_name.empty()) {
+            return;
+        }
+
+        log_f.open(p_settings->log_file_name);
+        log_f << "run_i,t,e,v" << std::endl;
     }
 
-    void run()
+    void update_log()
     {
-        _context.start_time = std::chrono::steady_clock::now();
-        for (const state_function_t &f : init_functions) {
-            f(_context);
+        // write the log to file
+        assert(!p_settings->log_file_name.empty());
+        if (!log_f.is_open()) {
+            return;
         }
-        auto cycle_begin_time = std::chrono::steady_clock::now();
-        while (init_loop_functions.size() > 0 && !_context.init_done) {
-            for (const state_function_t &f : init_loop_functions) {
-                if (_context.init_done) {
-                    break;
-                }
-                f(_context);
-            }
-            auto cycle_end_time = std::chrono::steady_clock::now();
-            _context.cycle_time_us =
-                    std::chrono::duration_cast<std::chrono::microseconds>(
-                            cycle_end_time - cycle_begin_time)
-                            .count();
-            cycle_begin_time = cycle_end_time;
-        }
-        while (run_loop_functions.size() > 0 && !_context.run_done) {
-            for (const state_function_t &f : run_loop_functions) {
-                if (_context.run_done) {
-                    break;
-                }
-                f(_context);
-            }
-            auto cycle_end_time = std::chrono::steady_clock::now();
-            _context.cycle_time_us =
-                    std::chrono::duration_cast<std::chrono::microseconds>(
-                            cycle_end_time - cycle_begin_time)
-                            .count();
-            cycle_begin_time = cycle_end_time;
-        }
-        _context.stop_time = std::chrono::steady_clock::now();
-        for (const state_function_t &f : finalize_functions) {
-            f(_context);
+
+        log_f << run_i;
+        log_f << "," << t;
+        log_f << "," << state.get_energy();
+        log_f << "," << state.get_value();
+        log_f << std::endl;
+    }
+
+    void init_progress()
+    {
+        if (t > 0) {
+            progress.n_min         = 1;
+            progress.n_max         = p_settings->n_states;
+            progress.update_period = p_settings->progress_update_period;
         }
     }
-};
 
-template <typename TState>
-void init_log(Context<TState> &c)
-{
-    assert(!c.log_f.is_open());
-    if (c.p_settings->log_file_name.empty()) {
-        return;
+    void progress_text_reset()
+    {
+        progress.reset();
     }
 
-    c.log_f.open(c.p_settings->log_file_name);
-    c.log_f << "run_i,t,e,v" << std::endl;
-}
-
-template <typename TState>
-void update_log(Context<TState> &c)
-{
-    // write the log to file
-    assert(!c.p_settings->log_file_name.empty());
-    if (!c.log_f.is_open()) {
-        return;
+    void progress_text_add_nl()
+    {
+        progress.text += "\n";
     }
 
-    c.log_f << c.run_i;
-    c.log_f << "," << c.temperature;
-    c.log_f << "," << c.state.get_energy();
-    c.log_f << "," << c.state.get_value();
-    c.log_f << std::endl;
-}
+    void progress_text_add_stats()
+    {
+        const double run_s = 1 / cycle_time_us * 1000000;
 
-template <typename TState>
-void init_progress(Context<TState> &c)
-{
-    if (c.temperature > 0) {
-        c.progress.n_min         = 1;
-        c.progress.n_max         = c.p_settings->n_states;
-        c.progress.update_period = c.p_settings->progress_update_period;
-    }
-}
+        std::stringstream ss;
+        ss << " n/s " << run_s;
 
-template <typename TState>
-void progress_text_reset(Context<TState> &c)
-{
-    c.progress.reset();
-}
-
-bool last_line_empty(const std::string &text)
-{
-    return (text.empty() || text.back() == '\n' || text.back() == '\r');
-}
-
-template <typename TState>
-void progress_text_add_nl(Context<TState> &c)
-{
-    c.progress.text += "\n";
-}
-
-template <typename TState>
-void progress_text_add_stats(Context<TState> &c)
-{
-    const double run_s = 1 / c.cycle_time_us * 1000000;
-
-    std::stringstream ss;
-    ss << " n/s " << run_s;
-
-    c.progress.text += std::string(ss.str());
-}
-
-template <typename TState>
-void progress_text_add_total(Context<TState> &c)
-{
-    if (!last_line_empty(c.progress.text)) {
-        c.progress.text += " ";
-    }
-    c.progress.text += c.progress.str_total(c.run_i);
-}
-
-template <typename TState>
-void progress_text_add_pct(Context<TState> &c)
-{
-    if (!last_line_empty(c.progress.text)) {
-        c.progress.text += " ";
-    }
-    c.progress.text += c.progress.str_pct(c.run_i);
-}
-
-template <typename TState>
-void progress_text_add_eta(Context<TState> &c)
-{
-    if (!last_line_empty(c.progress.text)) {
-        c.progress.text += " ";
-    }
-    c.progress.text += c.progress.str_eta(c.run_i);
-}
-
-template <typename TState>
-void progress_text_add_e(Context<TState> &c)
-{
-    if (!last_line_empty(c.progress.text)) {
-        c.progress.text += " ";
-    }
-    std::ostringstream oss;
-    oss << std::scientific << std::setprecision(3) << c.state.get_energy();
-    c.progress.text += "e " + oss.str();
-}
-
-template <typename TState>
-void progress_text_add_t(Context<TState> &c)
-{
-    if (!last_line_empty(c.progress.text)) {
-        c.progress.text += " ";
-    }
-    std::ostringstream oss;
-    oss << std::scientific << std::setprecision(3) << c.temperature;
-    c.progress.text += "t " + oss.str();
-}
-
-template <typename TState>
-void progress_text_add_v(Context<TState> &c)
-{
-    if (!last_line_empty(c.progress.text)) {
-        c.progress.text += " ";
-    }
-    std::ostringstream oss;
-    oss << std::scientific << std::setprecision(3) << c.state.get_value();
-    c.progress.text += "v " + oss.str();
-}
-
-template <typename TState>
-void progress_text_add_freq(Context<TState> &c)
-{
-    if (!last_line_empty(c.progress.text)) {
-        c.progress.text += " ";
-    }
-    const double run_s = 1 / c.cycle_time_us * 1000000;
-    c.progress.text += "freq " + std::to_string(run_s);
-}
-
-template <typename TState>
-void progress_print(Context<TState> &c)
-{
-    c.progress.print();
-}
-
-template <typename TState>
-void progress_clear_line(Context<TState> &c)
-{
-    aviize::erase_line(c.progress.text);
-    c.progress.print();
-}
-
-template <typename TState>
-void stats_print(Context<TState> &c)
-{
-    std::stringstream ss{};
-    ss << c.get_stats();
-    aviize::print(ss);
-}
-
-template <typename TState>
-void stats_create_file(Context<TState> &c)
-{
-    if (c.p_settings->stats_file_name.empty()) {
-        return;
+        progress.text += std::string(ss.str());
     }
 
-    std::ofstream f(c.p_settings->stats_file_name);
-    f << c.get_stats();
-}
+    void progress_text_add_total()
+    {
+        if (!last_line_empty(progress.text)) {
+            progress.text += " ";
+        }
+        progress.text += progress.str_total(run_i);
+    }
 
-template <typename TState>
-void randomize_state(Context<TState> &c)
-{
-    assert(c.run_i == 1);
-    c.state.reset_evaluation();
-    c.state.randomize();
-}
+    void progress_text_add_pct()
+    {
+        if (!last_line_empty(progress.text)) {
+            progress.text += " ";
+        }
+        progress.text += progress.str_pct(run_i);
+    }
 
-template <typename TState>
-void propose_new_state(Context<TState> &c)
-{
-    c.proposed_state = c.state;
-    c.proposed_state.reset_evaluation();
-    c.proposed_state.change();
-}
+    void progress_text_add_eta()
+    {
+        if (!last_line_empty(progress.text)) {
+            progress.text += " ";
+        }
+        progress.text += progress.str_eta(run_i);
+    }
 
-template <typename TState>
-void init_t_history(Context<TState> &c)
-{
-    // calculate intermediate init temperatures
-    // - T = -(E_proposed - E) / ln(P)
-    // - from Acceptance probability
-    //   - if E_new < E_current: P = 1
-    //   - else: P = exp(-(E_proposed - E) / T)
-    //   - ref: https://en.wikipedia.org/wiki/Simulated_annealing
-    // - only for cases where new state is worse and we need
-    //   to use the p_acceptance
-    // - smaller energy = better
-    assert(c.init_t_history.size() < c.p_settings->init_t_history_len);
+    void progress_text_add_e()
+    {
+        if (!last_line_empty(progress.text)) {
+            progress.text += " ";
+        }
+        std::ostringstream oss;
+        oss << std::scientific << std::setprecision(3) << state.get_energy();
+        progress.text += "e " + oss.str();
+    }
 
-    const double dE = c.proposed_state.get_energy() - c.state.get_energy();
-    if (dE > 0) {
-        const double t = -dE / std::log(c.p_settings->init_p_acceptance);
+    void progress_text_add_t()
+    {
+        if (!last_line_empty(progress.text)) {
+            progress.text += " ";
+        }
+        std::ostringstream oss;
+        oss << std::scientific << std::setprecision(3) << t;
+        progress.text += "t " + oss.str();
+    }
+
+    void progress_text_add_v()
+    {
+        if (!last_line_empty(progress.text)) {
+            progress.text += " ";
+        }
+        std::ostringstream oss;
+        oss << std::scientific << std::setprecision(3) << state.get_value();
+        progress.text += "v " + oss.str();
+    }
+
+    void progress_text_add_freq()
+    {
+        if (!last_line_empty(progress.text)) {
+            progress.text += " ";
+        }
+        const double run_s = 1 / cycle_time_us * 1000000;
+        progress.text += "freq " + std::to_string(run_s);
+    }
+
+    void progress_print()
+    {
+        progress.print();
+    }
+
+    void progress_clear_line()
+    {
+        aviize::erase_line(progress.text);
+        progress.print();
+    }
+
+    void stats_print()
+    {
+        std::stringstream ss{};
+        ss << get_stats();
+        aviize::print(ss);
+    }
+
+    void stats_create_file()
+    {
+        if (p_settings->stats_file_name.empty()) {
+            return;
+        }
+
+        std::ofstream f(p_settings->stats_file_name);
+        f << get_stats();
+    }
+
+    void randomize_state()
+    {
+        assert(run_i == 1);
+        state.reset_evaluation();
+        state.randomize();
+    }
+
+    void propose_new_state()
+    {
+        proposed_state = state;
+        proposed_state.reset_evaluation();
+        proposed_state.change();
+    }
+
+    void generate_init_t_candidates()
+    {
+        // calculate intermediate init temperatures
+        // - T = -(E_proposed - E) / ln(P)
+        // - from Acceptance probability
+        //   - if E_new < E_current: P = 1
+        //   - else: P = exp(-(E_proposed - E) / T)
+        //   - ref: https://en.wikipedia.org/wiki/Simulated_annealing
+        // - only for cases where new state is worse and we need
+        //   to use the p_acceptance
+        // - smaller energy = better
+        assert(init_t_candidates.size() < p_settings->init_t_candidates_n);
+
+        const double dE = proposed_state.get_energy() - state.get_energy();
+        if (dE > 0) {
+            const double t = -dE / std::log(p_settings->init_p_acceptance);
+            assert(t > 0);
+            init_t_candidates.push_back(t);
+#ifndef NDEBUG
+            init_t_candidates_failed_n = 0;
+#endif
+        }
+#ifndef NDEBUG
+        else {
+            init_t_candidates_failed_n++;
+        }
+#endif
+    }
+
+    void select_init_t_as_max()
+    {
+        if (init_t_candidates.size() < p_settings->init_t_candidates_n) {
+            return;
+        }
+
+        assert(init_t_candidates.size() == p_settings->init_t_candidates_n);
+        assert(t == 0);
+        assert(t_max == 0);
+
+        // temperature_max = max(init_t at init_p_acceptance)
+        t_max = *max_element(init_t_candidates.begin(),
+                             init_t_candidates.end());
+        t     = t_max;
         assert(t > 0);
-        c.init_t_history.push_back(t);
-        c.init_t_history_failed_i = 0;
-    }
-    else {
-        c.init_t_history_failed_i++;
-    }
-}
-
-template <typename TState>
-void init_t_select_max(Context<TState> &c)
-{
-    if (c.init_t_history.size() < c.p_settings->init_t_history_len) {
-        return;
     }
 
-    assert(c.init_t_history.size() == c.p_settings->init_t_history_len);
-    assert(c.temperature == 0);
-    assert(c.t_max == 0);
-
-    // t_max = max(init_t at init_p_acceptance)
-    c.t_max = *max_element(c.init_t_history.begin(), c.init_t_history.end());
-    c.temperature = c.t_max;
-    assert(c.temperature > 0);
-}
-
-template <typename TState>
-void decide_init_done(Context<TState> &c)
-{
-    if (c.init_t_history.size() == c.p_settings->init_t_history_len) {
-        c.init_done = true;
-    }
-#ifndef NDEBUG
-    if (c.init_t_history_failed_i > c.p_settings->init_t_history_len) {
-        std::cerr << "init_t_history_failed_i: " << c.init_t_history_failed_i
-                  << std::endl;
-        std::cerr << "init_t_history_len: " << c.p_settings->init_t_history_len
-                  << std::endl;
-        assert(false);
-    }
-#endif
-}
-
-template <typename TState>
-void update_state(Context<TState> &c)
-{
-    c.run_i++;
-    const double dE = c.proposed_state.get_energy() - c.state.get_energy();
-
-    if (dE < 0) {
-        c.state = c.proposed_state;
-        return;
-    }
-
-    // dE >= 0
-    const double p_acceptance = std::exp(-dE / c.temperature);
-    if (rododendrs::rnd01() <= p_acceptance) {
-        c.state = c.proposed_state;
-        return;
-    }
-}
-
-template <typename TState>
-void reset_state_evaluation(Context<TState> &c)
-{
-    c.state.reset_evaluation();
-}
-
-template <typename TState>
-void do_cool_set(Context<TState> &c)
-{
-    assert(!c.do_cool);
-    c.do_cool = true;
-}
-
-template <typename TState>
-void cool_at_rate(Context<TState> &c)
-{
-    assert(c.p_settings->cooling_rate > 0);
-    assert(c.p_settings->cooling_rate <= 1);
-    assert(c.temperature <= c.t_max);
-    assert(c.temperature >= 0);
-    if (c.do_cool) {
-        // t = T0 * a^(i/R)
-        // ref:
-        // https://www.cicirello.org/publications/CP2007-Autonomous-Search-Workshop.pdf
-        c.temperature = c.t_max *
-                        std::pow(c.p_settings->cooling_rate,
-                                 std::floor(c.cooling_i /
-                                            c.p_settings->cooling_round_len));
-        c.cooling_i++;
-
-        if (c.temperature < 0) {
-            c.temperature = 0;
+    void decide_init_done()
+    {
+        if (init_t_candidates.size() == p_settings->init_t_candidates_n) {
+            init_done = true;
         }
-    }
-    c.do_cool = false;
-}
-
-template <typename TState>
-void e_history_update(Context<TState> &c)
-{
-    const double dE = c.proposed_state.get_energy() - c.state.get_energy();
-    if (dE >= 0) {
-        return;
-    }
-
-    assert(c.e_history_len > 0);
-    c.e_history.push_front(c.state.get_energy());
-    if (c.e_history.size() > c.e_history_len) {
-        c.e_history.pop_back();
-    }
-    assert(c.e_history.size() <= c.e_history_len);
-}
-
-template <typename TState>
-void decide_cool_sma(Context<TState> &c)
-{
-    assert(c.p_settings->e_sma_fast_len < c.p_settings->e_sma_slow_len);
-    assert(!c.do_cool);
-    if (c.e_history.size() < c.e_history_len) {
-        return;
-    }
-
-    assert(c.p_settings->e_decision_period > 0);
-    if (c.run_i % c.p_settings->e_decision_period) {
-        return;
-    }
-
-    assert(c.temperature <= c.t_max);
-    assert(c.temperature >= 0);
-
-    // calculate avg(energy) at two intervals in the past
-    double sum_e_sma_fast = 0;
-    for (size_t i = 0; i < c.p_settings->e_sma_fast_len; i++) {
-        sum_e_sma_fast += c.e_history[i];
-    }
-    const double e_sma_fast = sum_e_sma_fast / c.p_settings->e_sma_fast_len;
-
-    double sum_e_sma_slow = 0;
-    for (size_t i = 0; i < c.p_settings->e_sma_slow_len; i++) {
-        sum_e_sma_slow += c.e_history[i];
-    }
-    const double e_sma_slow = sum_e_sma_slow / c.p_settings->e_sma_slow_len;
-
-    if (e_sma_fast > e_sma_slow) {
-        c.do_cool = true;
-    }
-}
-
-template <typename TState>
-void decide_cool_min_sd(Context<TState> &c)
-{
-    assert(c.p_settings->e_window > 0);
-    assert(c.p_settings->e_shift > 0);
-    const size_t req_e_history_len =
-            c.p_settings->e_shift + c.p_settings->e_window;
-    assert(c.e_history_len == req_e_history_len);
-
-    assert(!c.do_cool);
-    if (c.e_history.size() < req_e_history_len) {
-        return;
-    }
-
-    assert(c.p_settings->e_decision_period > 0);
-    if (c.run_i % c.p_settings->e_decision_period) {
-        return;
-    }
-
-    assert(c.temperature <= c.t_max);
-    assert(c.temperature >= 0);
-
-    // calculate energy at two intervals in the past
-    const auto front_begin = c.e_history.begin();
-    const auto front_end   = c.e_history.begin() + c.p_settings->e_window;
-    const std::vector<double> front_window(front_begin, front_end);
-    assert(front_window.size() == c.p_settings->e_window);
-    const double front_sd = rododendrs::sd<std::vector>(front_window);
-
-    const auto back_begin = c.e_history.begin() + c.p_settings->e_shift;
-    const auto back_end   = c.e_history.begin() + c.p_settings->e_window +
-                          c.p_settings->e_shift;
-    const std::vector<double> back_window(back_begin, back_end);
-    assert(back_window.size() == c.p_settings->e_window);
-    const double back_mean = rododendrs::mean<std::vector>(back_window);
-    const double back_sd   = rododendrs::sd<std::vector>(back_window);
-
-    if (std::abs(back_mean - c.e_history[0]) < std::min(front_sd, back_sd)) {
-        c.do_cool = true;
-    }
-}
-
-template <typename TState>
-void decide_cool_az(Context<TState> &c)
-{
-    assert(c.p_settings->e_window > 0);
-    assert(c.p_settings->e_shift > 0);
-    const size_t req_e_history_len =
-            c.p_settings->e_shift + c.p_settings->e_window;
-    assert(c.e_history_len == req_e_history_len);
-
-    assert(!c.do_cool);
-    if (c.e_history.size() < req_e_history_len) {
-        return;
-    }
-
-    assert(c.p_settings->e_decision_period > 0);
-    if (c.run_i % c.p_settings->e_decision_period) {
-        return;
-    }
-
-    assert(c.temperature <= c.t_max);
-    assert(c.temperature >= 0);
-
-    // calculate energy at two intervals in the past
-    const auto front_begin = c.e_history.begin();
-    const auto front_end   = c.e_history.begin() + c.p_settings->e_window;
-    const std::vector<double> front_window(front_begin, front_end);
-    assert(front_window.size() == c.p_settings->e_window);
-    const double front_mean = rododendrs::mean<std::vector>(front_window);
-    const double front_sd   = rododendrs::sd<std::vector>(front_window);
-
-    const auto back_begin = c.e_history.begin() + c.p_settings->e_shift;
-    const auto back_end   = c.e_history.begin() + c.p_settings->e_window +
-                          c.p_settings->e_shift;
-    const std::vector<double> back_window(back_begin, back_end);
-    assert(back_window.size() == c.p_settings->e_window);
-    const double back_mean = rododendrs::mean<std::vector>(back_window);
-    const double back_sd   = rododendrs::sd<std::vector>(back_window);
-
-    const double az_overlap =
-            rododendrs::az_pdf_overlap<double>(front_mean,
-                                               front_sd,
-                                               c.p_settings->e_window,
-                                               back_mean,
-                                               back_sd,
-                                               c.p_settings->e_window);
-    if (az_overlap >= c.p_settings->e_min_az_overlap) {
-        c.do_cool = true;
-    }
-}
-
-template <typename TState>
-void decide_run_done(Context<TState> &c)
-{
-    assert(c.temperature <= c.t_max);
-    assert(c.temperature >= 0);
-    assert(!c.run_done);
-    if (c.run_i == c.p_settings->n_states) {
-        c.run_done = true;
-    }
-}
-
-template <typename TState>
-void init_rec_linear(Context<TState> &c)
-{
-    // record state queue holds the
-    // numbers of all states that must produce a record
-    // - always starts with 1
-    // - always end n_states
-    assert(c.rec_states_queue.empty());
-    c.rec_states_queue.push(1);
-    assert(c.p_settings->n_records > 0);
-    const double rec_step =
-            c.p_settings->n_states / (double)(c.p_settings->n_records - 1);
-    for (size_t rec_i = 1; rec_i < c.p_settings->n_records - 1; rec_i++) {
-        c.rec_states_queue.push(static_cast<size_t>(rec_step * rec_i));
-    }
-    c.rec_states_queue.push(c.p_settings->n_states);
-    assert(c.rec_states_queue.size() == c.p_settings->n_records);
-}
-
-template <typename TState>
-void init_rec_at_rate(Context<TState> &c)
-{
-    // record state queue holds the
-    // numbers of all states that must produce a record
-    // - always starts with 1 and ends with n_states
-    assert(c.rec_states_queue.empty());
-
-    // from
-    // a k^0 = 1
-    // a k^(n_records-1) = n_states,
-    // where a = 1, records = [0, n_records-1]
-    // k ^ (n_records-1) = n_states/a
-    // k = (n_states/a) ^ 1/(n_records-1)
-    // k = n_states ^ 1/(n_records-1)
-    assert(c.p_settings->n_records > 0);
-    const double float_err_compensation = 1e-5;
-    const double rec_rate               = std::pow(
-            c.p_settings->n_states, 1 / (double)(c.p_settings->n_records - 1));
-
-    double run_i = 1;
-    for (size_t rec_i = 1; rec_i <= c.p_settings->n_records; rec_i++) {
 #ifndef NDEBUG
-        if (rec_i == 1) {
-            assert(static_cast<size_t>(run_i) == 1);
-        }
-        if (rec_i == c.p_settings->n_records) {
-            assert(static_cast<size_t>(run_i + float_err_compensation) ==
-                   c.p_settings->n_states);
+        if (init_t_candidates_failed_n > p_settings->init_t_candidates_n) {
+            std::cerr << "init_t_candidates_failed_n: "
+                      << init_t_candidates_failed_n << std::endl;
+            std::cerr << "init_t_candidates_n: "
+                      << p_settings->init_t_candidates_n << std::endl;
+            assert(false);
         }
 #endif
-        c.rec_states_queue.push(
-                static_cast<size_t>(run_i + float_err_compensation));
-        run_i *= rec_rate;
     }
-    assert(c.rec_states_queue.size() == c.p_settings->n_records);
-}
 
-template <typename TState>
-void init_rec_periods(Context<TState> &c)
-{
-    // record state queue holds the
-    // numbers of all states that must produce a record
-    // - always starts with 1
-    // - always end n_states
-    assert(c.rec_states_queue.empty());
-    for (size_t i = 1; i <= c.p_settings->n_states; i++) {
-        if (c.p_settings->rec_schedule.is_time(i)) {
-            c.rec_states_queue.push(i);
+    void update_state()
+    {
+        run_i++;
+        const double dE = proposed_state.get_energy() - state.get_energy();
+
+        if (dE < 0) {
+            state = proposed_state;
+            return;
+        }
+
+        // dE >= 0
+        const double p_acceptance = std::exp(-dE / t);
+        if (rododendrs::rnd01() <= p_acceptance) {
+            state = proposed_state;
+            return;
         }
     }
-}
 
-template <typename TState>
-void decide_rec(Context<TState> &c)
-{
-    if (!c.rec_states_queue.empty() && c.run_i >= c.rec_states_queue.front()) {
-        c.rec_states_queue.pop();
-        c.do_rec = true;
-        return;
+    void reset_state_evaluation()
+    {
+        state.reset_evaluation();
     }
 
-    c.do_rec = false;
-}
+    void do_cool_set()
+    {
+        assert(!do_cool);
+        do_cool = true;
+    }
+
+    void cool_at_rate()
+    {
+        assert(p_settings->cooling_rate > 0);
+        assert(p_settings->cooling_rate <= 1);
+        assert(t <= t_max);
+        assert(t >= 0);
+        if (do_cool) {
+            // t = T0 * a^(i/R)
+            // ref:
+            // https://www.cicirello.org/publications/CP2007-Autonomous-Search-Workshop.pdf
+            t = t_max * std::pow(p_settings->cooling_rate,
+                                 std::floor(cooling_i /
+                                            p_settings->cooling_round_len));
+            cooling_i++;
+
+            if (t < 0) {
+                t = 0;
+            }
+        }
+        do_cool = false;
+    }
+
+    void e_history_update()
+    {
+        const double dE = proposed_state.get_energy() - state.get_energy();
+        if (dE >= 0) {
+            return;
+        }
+
+        assert(p_settings->e_history_len > 0);
+        e_history.push_front(state.get_energy());
+        if (e_history.size() > p_settings->e_history_len) {
+            e_history.pop_back();
+        }
+        assert(e_history.size() <= p_settings->e_history_len);
+    }
+
+    void decide_cool_sma()
+    {
+        assert(p_settings->e_sma_fast_len < p_settings->e_sma_slow_len);
+        assert(!do_cool);
+        if (e_history.size() < p_settings->e_history_len) {
+            return;
+        }
+
+        assert(p_settings->e_decision_period > 0);
+        if (run_i % p_settings->e_decision_period) {
+            return;
+        }
+
+        assert(t <= t_max);
+        assert(t >= 0);
+
+        // calculate avg(energy) at two intervals in the past
+        double sum_e_sma_fast = 0;
+        for (size_t i = 0; i < p_settings->e_sma_fast_len; i++) {
+            sum_e_sma_fast += e_history[i];
+        }
+        const double e_sma_fast = sum_e_sma_fast / p_settings->e_sma_fast_len;
+
+        double sum_e_sma_slow = 0;
+        for (size_t i = 0; i < p_settings->e_sma_slow_len; i++) {
+            sum_e_sma_slow += e_history[i];
+        }
+        const double e_sma_slow = sum_e_sma_slow / p_settings->e_sma_slow_len;
+
+        if (e_sma_fast > e_sma_slow) {
+            do_cool = true;
+        }
+    }
+
+    void decide_cool_min_sd()
+    {
+        assert(p_settings->e_window > 0);
+        assert(p_settings->e_shift > 0);
+        const size_t req_e_history_len =
+                p_settings->e_shift + p_settings->e_window;
+        assert(p_settings->e_history_len == req_e_history_len);
+
+        assert(!do_cool);
+        if (e_history.size() < req_e_history_len) {
+            return;
+        }
+
+        assert(p_settings->e_decision_period > 0);
+        if (run_i % p_settings->e_decision_period) {
+            return;
+        }
+
+        assert(t <= t_max);
+        assert(t >= 0);
+
+        // calculate energy at two intervals in the past
+        const auto front_begin = e_history.begin();
+        const auto front_end   = e_history.begin() + p_settings->e_window;
+        const std::vector<double> front_window(front_begin, front_end);
+        assert(front_window.size() == p_settings->e_window);
+        const double front_sd = rododendrs::sd<std::vector>(front_window);
+
+        const auto back_begin = e_history.begin() + p_settings->e_shift;
+        const auto back_end =
+                e_history.begin() + p_settings->e_window + p_settings->e_shift;
+        const std::vector<double> back_window(back_begin, back_end);
+        assert(back_window.size() == p_settings->e_window);
+        const double back_mean = rododendrs::mean<std::vector>(back_window);
+        const double back_sd   = rododendrs::sd<std::vector>(back_window);
+
+        if (std::abs(back_mean - e_history[0]) < std::min(front_sd, back_sd)) {
+            do_cool = true;
+        }
+    }
+
+    void decide_cool_az()
+    {
+        assert(p_settings->e_window > 0);
+        assert(p_settings->e_shift > 0);
+        const size_t req_e_history_len =
+                p_settings->e_shift + p_settings->e_window;
+        assert(p_settings->e_history_len == req_e_history_len);
+
+        assert(!do_cool);
+        if (e_history.size() < req_e_history_len) {
+            return;
+        }
+
+        assert(p_settings->e_decision_period > 0);
+        if (run_i % p_settings->e_decision_period) {
+            return;
+        }
+
+        assert(t <= t_max);
+        assert(t >= 0);
+
+        // calculate energy at two intervals in the past
+        const auto front_begin = e_history.begin();
+        const auto front_end   = e_history.begin() + p_settings->e_window;
+        const std::vector<double> front_window(front_begin, front_end);
+        assert(front_window.size() == p_settings->e_window);
+        const double front_mean = rododendrs::mean<std::vector>(front_window);
+        const double front_sd   = rododendrs::sd<std::vector>(front_window);
+
+        const auto back_begin = e_history.begin() + p_settings->e_shift;
+        const auto back_end =
+                e_history.begin() + p_settings->e_window + p_settings->e_shift;
+        const std::vector<double> back_window(back_begin, back_end);
+        assert(back_window.size() == p_settings->e_window);
+        const double back_mean = rododendrs::mean<std::vector>(back_window);
+        const double back_sd   = rododendrs::sd<std::vector>(back_window);
+
+        const double az_overlap =
+                rododendrs::az_pdf_overlap<double>(front_mean,
+                                                   front_sd,
+                                                   p_settings->e_window,
+                                                   back_mean,
+                                                   back_sd,
+                                                   p_settings->e_window);
+        if (az_overlap >= p_settings->e_min_az_overlap) {
+            do_cool = true;
+        }
+    }
+
+    void decide_run_done()
+    {
+        assert(t <= t_max);
+        assert(t >= 0);
+        assert(!run_done);
+        if (run_i == p_settings->n_states) {
+            run_done = true;
+        }
+    }
+
+    void init_rec_linear()
+    {
+        // record state queue holds the
+        // numbers of all states that must produce a record
+        // - always starts with 1
+        // - always end n_states
+        assert(rec_states_queue.empty());
+        rec_states_queue.push(1);
+        assert(p_settings->n_records > 0);
+        const double rec_step =
+                p_settings->n_states / (double)(p_settings->n_records - 1);
+        for (size_t rec_i = 1; rec_i < p_settings->n_records - 1; rec_i++) {
+            rec_states_queue.push(static_cast<size_t>(rec_step * rec_i));
+        }
+        rec_states_queue.push(p_settings->n_states);
+        assert(rec_states_queue.size() == p_settings->n_records);
+    }
+
+    void init_rec_at_rate()
+    {
+        // record state queue holds the
+        // numbers of all states that must produce a record
+        // - always starts with 1 and ends with n_states
+        assert(rec_states_queue.empty());
+
+        // from
+        // a k^0 = 1
+        // a k^(n_records-1) = n_states,
+        // where a = 1, records = [0, n_records-1]
+        // k ^ (n_records-1) = n_states/a
+        // k = (n_states/a) ^ 1/(n_records-1)
+        // k = n_states ^ 1/(n_records-1)
+        assert(p_settings->n_records > 0);
+        const double float_err_compensation = 1e-5;
+        const double rec_rate               = std::pow(
+                p_settings->n_states, 1 / (double)(p_settings->n_records - 1));
+
+        double run_i = 1;
+        for (size_t rec_i = 1; rec_i <= p_settings->n_records; rec_i++) {
+#ifndef NDEBUG
+            if (rec_i == 1) {
+                assert(static_cast<size_t>(run_i) == 1);
+            }
+            if (rec_i == p_settings->n_records) {
+                assert(static_cast<size_t>(run_i + float_err_compensation) ==
+                       p_settings->n_states);
+            }
+#endif
+            rec_states_queue.push(
+                    static_cast<size_t>(run_i + float_err_compensation));
+            run_i *= rec_rate;
+        }
+        assert(rec_states_queue.size() == p_settings->n_records);
+    }
+
+    void init_rec_periods()
+    {
+        // record state queue holds the
+        // numbers of all states that must produce a record
+        // - always starts with 1
+        // - always end n_states
+        assert(rec_states_queue.empty());
+        for (size_t i = 1; i <= p_settings->n_states; i++) {
+            if (p_settings->rec_schedule.is_time(i)) {
+                rec_states_queue.push(i);
+            }
+        }
+    }
+
+    void decide_rec()
+    {
+        if (!rec_states_queue.empty() && run_i >= rec_states_queue.front()) {
+            rec_states_queue.pop();
+            do_rec = true;
+            return;
+        }
+
+        do_rec = false;
+    }
+};
 
 }  // namespace lapsa
