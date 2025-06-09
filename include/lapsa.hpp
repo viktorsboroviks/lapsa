@@ -149,6 +149,7 @@ struct Settings {
         n_records           (iestaade::size_t_from_json(config_filepath, key_path_prefix + "/n_records", true, 0)),
         rec_schedule(config_filepath, key_path_prefix + "/rec_periods")
     {
+        assert(init_t_candidates_n <= init_t_max_attempts);
     }
     // clang-format on
 };
@@ -207,9 +208,6 @@ struct StateMachine {
     const Settings *p_settings;
 
     // init
-#ifndef NDEBUG
-    std::size_t init_t_candidates_failed_n = 0;
-#endif
     bool init_done = false;
 
     // runtime
@@ -348,11 +346,9 @@ void update_log(StateMachine<TState> &sm)
 template <typename TState>
 void init_progress(StateMachine<TState> &sm)
 {
-    if (sm.t > 0) {
-        sm.progress.n_min         = 1;
-        sm.progress.n_max         = sm.p_settings->n_states;
-        sm.progress.update_period = sm.p_settings->progress_update_period;
-    }
+    sm.progress.n_min         = 1;
+    sm.progress.n_max         = sm.p_settings->n_states;
+    sm.progress.update_period = sm.p_settings->progress_update_period;
 }
 
 template <typename TState>
@@ -515,15 +511,7 @@ void generate_init_t_candidates(StateMachine<TState> &sm)
         const double t = -dE / std::log(sm.p_settings->init_p_acceptance);
         assert(t > 0);
         sm.init_t_candidates.push_back(t);
-#ifndef NDEBUG
-        sm.init_t_candidates_failed_n = 0;
-#endif
     }
-#ifndef NDEBUG
-    else {
-        sm.init_t_candidates_failed_n++;
-    }
-#endif
 }
 
 template <typename TState>
@@ -547,24 +535,35 @@ void select_init_t_as_max(StateMachine<TState> &sm)
 template <typename TState>
 void decide_init_done(StateMachine<TState> &sm)
 {
+    if (sm.run_i >= sm.p_settings->init_t_max_attempts) {
+        std::cerr << "init max attempts reached: "
+                  << sm.p_settings->init_t_max_attempts << std::endl;
+        std::cerr << "valid candidates: " << sm.init_t_candidates.size()
+                  << std::endl;
+        exit(EXIT_FAILURE);
+    }
+
     if (sm.init_t_candidates.size() == sm.p_settings->init_t_candidates_n) {
         sm.init_done = true;
+        sm.run_i     = 0;
     }
-#ifndef NDEBUG
-    if (sm.init_t_candidates_failed_n > sm.p_settings->init_t_candidates_n) {
-        std::cerr << "init_t_candidates_failed_n: "
-                  << sm.init_t_candidates_failed_n << std::endl;
-        std::cerr << "init_t_candidates_n: "
-                  << sm.p_settings->init_t_candidates_n << std::endl;
-        assert(false);
-    }
-#endif
+}
+
+template <typename TState>
+void run_i_zeroize(StateMachine<TState> &sm)
+{
+    sm.run_i = 0;
+}
+
+template <typename TState>
+void run_i_inc(StateMachine<TState> &sm)
+{
+    sm.run_i++;
 }
 
 template <typename TState>
 void update_state(StateMachine<TState> &sm)
 {
-    sm.run_i++;
     const double dE = sm.proposed_state.get_energy() - sm.state.get_energy();
 
     if (dE < 0) {
