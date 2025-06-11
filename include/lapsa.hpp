@@ -424,6 +424,17 @@ void progress_text_add_t(StateMachine<TState> &sm)
 }
 
 template <typename TState>
+void progress_text_add_init_candidates(StateMachine<TState> &sm)
+{
+    if (!last_line_empty(sm.progress.text)) {
+        sm.progress.text += " ";
+    }
+    std::ostringstream oss;
+    oss << sm.init_t_candidates.size();
+    sm.progress.text += "init candidates  " + oss.str();
+}
+
+template <typename TState>
 void progress_text_add_v(StateMachine<TState> &sm)
 {
     if (!last_line_empty(sm.progress.text)) {
@@ -545,7 +556,7 @@ void decide_init_done(StateMachine<TState> &sm)
 
     if (sm.init_t_candidates.size() == sm.p_settings->init_t_candidates_n) {
         sm.init_done = true;
-        sm.run_i     = 0;
+        sm.run_i     = 1;
     }
 }
 
