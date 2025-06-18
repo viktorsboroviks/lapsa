@@ -158,7 +158,6 @@ class State {
 protected:
     bool _evaluated;
     double _energy;
-    double _value;
 
 public:
     void reset_evaluation()
@@ -167,8 +166,7 @@ public:
     }
 
     explicit State() :
-        _energy(-1),
-        _value(-1)
+        _energy(-1)
     {
         reset_evaluation();
     }
@@ -179,12 +177,6 @@ public:
     virtual double get_energy()
     {
         std::cout << "error: get_energy method not implemented" << std::endl;
-        return -1.0;
-    }
-
-    virtual double get_value()
-    {
-        std::cout << "error: get_value method not implemented" << std::endl;
         return -1.0;
     }
 
@@ -241,6 +233,7 @@ struct StateMachine {
     // state machine functions
     std::vector<state_function_t> init_functions{};
     std::vector<state_function_t> init_loop_functions{};
+    std::vector<state_function_t> run_functions{};
     std::vector<state_function_t> run_loop_functions{};
     std::vector<state_function_t> finalize_functions{};
 
@@ -269,6 +262,9 @@ struct StateMachine {
                             cycle_end_time - cycle_begin_time)
                             .count();
             cycle_begin_time = cycle_end_time;
+        }
+        for (const state_function_t &f : run_functions) {
+            f(*this);
         }
         while (run_loop_functions.size() > 0 && !run_done) {
             for (const state_function_t &f : run_loop_functions) {
@@ -309,8 +305,6 @@ struct StateMachine {
            << std::endl;
         ss << std::left << std::setw(first_col_width) << "result energy"
            << state.get_energy() << std::endl;
-        ss << std::left << std::setw(first_col_width) << "result value"
-           << state.get_value() << std::endl;
         return ss.str();
     }
 };
@@ -339,12 +333,19 @@ void update_log(StateMachine<TState> &sm)
     sm.log_f << sm.run_i;
     sm.log_f << "," << sm.t;
     sm.log_f << "," << sm.state.get_energy();
-    sm.log_f << "," << sm.state.get_value();
     sm.log_f << std::endl;
 }
 
 template <typename TState>
-void init_progress(StateMachine<TState> &sm)
+void progress_init_init_loop(lapsa::StateMachine<TState> &sm)
+{
+    sm.progress.n_min         = 1;
+    sm.progress.n_max         = sm.p_settings->init_t_max_attempts;
+    sm.progress.update_period = sm.p_settings->progress_update_period;
+}
+
+template <typename TState>
+void progress_init_run_loop(lapsa::StateMachine<TState> &sm)
 {
     sm.progress.n_min         = 1;
     sm.progress.n_max         = sm.p_settings->n_states;
@@ -361,6 +362,22 @@ template <typename TState>
 void progress_text_add_nl(StateMachine<TState> &sm)
 {
     sm.progress.text += "\n";
+}
+
+template <typename TState>
+void progress_text_add_title_init_loop_nl(StateMachine<TState> &sm)
+{
+    std::stringstream ss;
+    ss << "init loop:" << std::endl;
+    sm.progress.text += ss.str();
+}
+
+template <typename TState>
+void progress_text_add_title_run_loop_nl(StateMachine<TState> &sm)
+{
+    std::stringstream ss;
+    ss << "run loop:" << std::endl;
+    sm.progress.text += ss.str();
 }
 
 template <typename TState>
@@ -435,17 +452,6 @@ void progress_text_add_init_candidates(StateMachine<TState> &sm)
 }
 
 template <typename TState>
-void progress_text_add_v(StateMachine<TState> &sm)
-{
-    if (!last_line_empty(sm.progress.text)) {
-        sm.progress.text += " ";
-    }
-    std::ostringstream oss;
-    oss << std::scientific << std::setprecision(3) << sm.state.get_value();
-    sm.progress.text += "v " + oss.str();
-}
-
-template <typename TState>
 void progress_text_add_freq(StateMachine<TState> &sm)
 {
     if (!last_line_empty(sm.progress.text)) {
@@ -469,7 +475,7 @@ void progress_clear_line(StateMachine<TState> &sm)
 }
 
 template <typename TState>
-void stats_print(StateMachine<TState> &sm)
+void print_stats(StateMachine<TState> &sm)
 {
     std::stringstream ss{};
     ss << sm.get_stats();
@@ -477,7 +483,7 @@ void stats_print(StateMachine<TState> &sm)
 }
 
 template <typename TState>
-void stats_create_file(StateMachine<TState> &sm)
+void create_stats_file(StateMachine<TState> &sm)
 {
     if (sm.p_settings->stats_file_name.empty()) {
         return;
