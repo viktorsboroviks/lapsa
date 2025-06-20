@@ -318,7 +318,10 @@ void init_log(StateMachine<TState> &sm)
     }
 
     sm.log_f.open(sm.p_settings->log_file_name);
-    sm.log_f << "run_i,t,e,v" << std::endl;
+    sm.log_f << "run_i,";
+    sm.log_f << "t,";
+    sm.log_f << "e";
+    sm.log_f << std::endl;
 }
 
 template <typename TState>
