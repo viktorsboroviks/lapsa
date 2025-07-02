@@ -54,10 +54,11 @@ private:
         assert(periods.empty());
 
         for (const boost::json::value &period_json : periods_json) {
-            Period new_period;
-            new_period.i_start = period_json.as_array()[0].to_number<size_t>();
-            new_period.period  = period_json.as_array()[1].to_number<size_t>();
-            periods.push_back(new_period);
+            const size_t i_start =
+                    period_json.as_array()[0].to_number<size_t>();
+            const size_t period =
+                    period_json.as_array()[1].to_number<size_t>();
+            periods.emplace_back(Period{i_start, period});
         }
     }
 
@@ -99,6 +100,10 @@ public:
 
     bool is_time(size_t i) const
     {
+        assert(!_periods.empty());
+        if (i < _periods.front().i_start) {
+            return false;
+        }
         const size_t i_period = _i_period(i, _periods);
         return i % _periods[i_period].period == 0;
     }
