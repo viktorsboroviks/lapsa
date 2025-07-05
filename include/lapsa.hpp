@@ -62,7 +62,7 @@ private:
         }
     }
 
-    size_t _i_period(size_t i, const std::vector<Period> &periods) const
+    static size_t _i_period(size_t i, const std::vector<Period> &periods) const
     {
         assert(!periods.empty());
 
@@ -122,7 +122,7 @@ struct Settings {
     size_t e_window            = 100;
     size_t e_shift             = 100;
     double e_min_az_overlap    = 0.99;
-    size_t e_history_len;
+    size_t e_history_len       = 1000;
 
     size_t progress_update_period = 1;
     std::string log_file_name     = "log.csv";

@@ -120,6 +120,7 @@ lint-cpp: \
 		--std=c++20 \
 		--inline-suppr \
 		--check-level=exhaustive \
+		--suppress=missingInclude \
 		--suppress=missingIncludeSystem \
 		--suppress=checkersReport \
 		--checkers-report=cppcheck_report.txt \
