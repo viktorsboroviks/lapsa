@@ -62,7 +62,7 @@ private:
         }
     }
 
-    static size_t _i_period(size_t i, const std::vector<Period> &periods) const
+    static size_t _i_period(size_t i, const std::vector<Period> &periods)
     {
         assert(!periods.empty());
 
