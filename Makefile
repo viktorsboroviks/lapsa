@@ -20,11 +20,11 @@ aviize:
 
 iestaade:
 	git clone git@github.com:viktorsboroviks/iestaade.git
-	cd iestaade; git checkout v2.5
+	cd iestaade; git checkout v4.0
 
 rododendrs:
 	git clone git@github.com:viktorsboroviks/rododendrs.git
-	cd rododendrs; git checkout v1.6
+	cd rododendrs; git checkout v1.32
 
 vasarniica:
 	git clone git@github.com:viktorsboroviks/vasarniica.git
@@ -142,7 +142,7 @@ clean:
 	rm -rf `find . -name "*.html"`
 
 distclean: clean
-	m -rf aviize
-	m -rf iestaade
-	m -rf rododendrs
-	m -rf vasarniica
+	rm -rf aviize
+	rm -rf iestaade
+	rm -rf rododendrs
+	rm -rf vasarniica
