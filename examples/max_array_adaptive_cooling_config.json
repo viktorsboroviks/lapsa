@@ -2,8 +2,8 @@
   "lapsa": {
     "n_states": 1000000,
     "init_p_acceptance": 0.97,
-    "init_t_history_len": 100,
-    "init_t_max_attempts": 10,
+    "init_t_candidates_n": 10,
+    "init_t_max_attempts": 100,
     "cooling_rate": 0.9,
     "cooling_round_len": 1,
     "e_decision_period": 5,
